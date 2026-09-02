@@ -31,7 +31,9 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "check:bundle": "expo export --platform ios --output-dir .expo-export-check --clear",
-    "check:calc": "node scripts/check-calc.mts"
+    "check:calc": "node scripts/check-calc.mts",
+    "check:sql": "node scripts/check-sql.mts",
+    "check": "npm run typecheck && npm run check:calc && npm run check:sql"
   },
   "private": true
 }

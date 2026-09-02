@@ -76,3 +76,31 @@ export interface DaySummary extends DayTotals {
   date: string;
   entry_count: number;
 }
+
+/** A nutrition block. Used both for per-100g bases and for absolute amounts. */
+export interface Nutrition {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number | null;
+}
+
+/**
+ * What Search and Scan hand to the entry form. When `per100` is present the
+ * form rescales nutrition as the quantity changes; otherwise `nutrition` is
+ * taken as the absolute amount for `quantity`.
+ */
+export interface EntryPrefill {
+  name: string;
+  brand: string | null;
+  source: EntrySource;
+  barcode: string | null;
+  quantity: number;
+  unit: string;
+  per100: Nutrition | null;
+  nutrition: Nutrition | null;
+  /** Grams in one serving, when the product declares one. */
+  serving_size_g: number | null;
+  imageUrl?: string | null;
+}
