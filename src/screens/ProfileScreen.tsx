@@ -64,7 +64,6 @@ export default function ProfileScreen() {
   const [draft, setDraft] = useState<Draft>(() => toDraft(DEFAULT_PROFILE_INPUT));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
 
   // Adopt the stored profile once it loads. Later edits stay local until saved.
   useEffect(() => {
@@ -112,7 +111,7 @@ export default function ProfileScreen() {
   const typedRate = parseNumber(draft.rate_kcal_per_day) ?? 0;
   const rateIsCapped = input !== null && draft.goal !== 'maintain' && typedRate > rateCap + 0.5;
 
-  const overshoot = input && targets ? macrosOvershoot(input, targets) : false;
+  const overshoot = targets ? macrosOvershoot(targets) : false;
 
   const dirty = useMemo(() => {
     if (!profile) return true;
@@ -122,7 +121,6 @@ export default function ProfileScreen() {
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
-    setJustSaved(false);
     setSaveError(null);
   }
 
@@ -138,7 +136,6 @@ export default function ProfileScreen() {
             ? String(DEFAULT_PROFILE_INPUT.rate_kcal_per_day)
             : prev.rate_kcal_per_day,
     }));
-    setJustSaved(false);
   }
 
   async function onSave() {
@@ -150,7 +147,6 @@ export default function ProfileScreen() {
       // saved targets agree the next time this screen loads.
       const clampedRate = Math.max(0, Math.min(input.rate_kcal_per_day, rateCap));
       await save({ ...input, rate_kcal_per_day: clampedRate });
-      setJustSaved(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not save your profile.';
       setSaveError(message);
@@ -402,7 +398,7 @@ export default function ProfileScreen() {
       {saveError ? <Text className="text-sm text-red-400">{saveError}</Text> : null}
 
       <Button
-        label={profile ? (dirty ? 'Save changes' : justSaved ? 'Saved' : 'Saved') : 'Save profile'}
+        label={profile ? (dirty ? 'Save changes' : 'Saved') : 'Save profile'}
         onPress={onSave}
         loading={saving}
         disabled={!isValid || (Boolean(profile) && !dirty)}

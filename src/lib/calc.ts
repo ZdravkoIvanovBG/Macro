@@ -117,7 +117,7 @@ export function calcTargets(input: ProfileInput): Targets {
  * True when protein + fat alone already meet or exceed the calorie target,
  * which leaves no room for carbohydrate. Worth warning about in the UI.
  */
-export function macrosOvershoot(input: ProfileInput, targets: Targets): boolean {
+export function macrosOvershoot(targets: Targets): boolean {
   const fromProteinFat =
     targets.protein_g_target * KCAL_PER_G.protein + targets.fat_g_target * KCAL_PER_G.fat;
   return fromProteinFat >= targets.calorie_target;
