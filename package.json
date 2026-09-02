@@ -30,7 +30,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "check:bundle": "expo export --platform ios --output-dir .expo-export-check --clear"
+    "check:bundle": "expo export --platform ios --output-dir .expo-export-check --clear",
+    "check:calc": "node scripts/check-calc.mts"
   },
   "private": true
 }
