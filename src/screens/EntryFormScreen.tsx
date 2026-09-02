@@ -306,7 +306,7 @@ export default function EntryFormScreen({ route, navigation }: Props) {
             onChangeText={(value) => set('name', value)}
             placeholder="e.g. Greek yoghurt 2%"
             error={show('name')}
-            autoFocus={!isEdit && !prefill}
+            autoFocus={!isEdit && (!prefill || prefill.name.trim() === '')}
           />
           <TextField
             label="Brand"
