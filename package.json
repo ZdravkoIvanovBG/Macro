@@ -33,7 +33,8 @@
     "check:bundle": "expo export --platform ios --output-dir .expo-export-check --clear",
     "check:calc": "node scripts/check-calc.mts",
     "check:sql": "node scripts/check-sql.mts",
-    "check": "npm run typecheck && npm run check:calc && npm run check:sql"
+    "check": "npm run typecheck && npm run check:calc && npm run check:sql && npm run check:off -- --offline",
+    "check:off": "node scripts/check-off.mts"
   },
   "private": true
 }
