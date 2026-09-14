@@ -3,13 +3,32 @@
 // endpoints still behave as expected.
 // Run with: npm run check:off  /  npm run check:off -- --offline
 import {
+  fetchIngredientsByBarcode,
+  fetchIngredientTaxonomyNames,
   fetchProductByBarcode,
+  looksLikeNonIngredientNote,
   productToPrefill,
   searchFoods,
   __testing,
 } from '../src/lib/off.ts';
 
-const { readPer100, readServingGrams, toProduct, readHits, readBrand, buildSearchUrl } = __testing;
+const {
+  readPer100,
+  readServingGrams,
+  toProduct,
+  readHits,
+  readBrand,
+  buildSearchUrl,
+  readIngredients,
+  toIngredientsProduct,
+  readIngredientsTextByLanguage,
+  selectIngredientsTextSource,
+  splitIngredientsText,
+  stripIngredientsLabelPrefix,
+  dedupeIngredientItems,
+  buildIngredientsFromSource,
+  isSubstantialIngredientsText,
+} = __testing;
 
 let failures = 0;
 
@@ -118,6 +137,255 @@ check('prefill records the barcode', prefill.barcode === '3017620422003');
 check('prefill records the source', prefill.source === 'search');
 check('prefill carries serving size', prefill.serving_size_g === 15);
 
+// --- ingredients --------------------------------------------------------------
+const noIngredients = readIngredients(undefined);
+check('non-array ingredients yields empty list', noIngredients.length === 0);
+
+const ingredientList = readIngredients([
+  { id: 'en:water', text: 'Water', percent_estimate: 60.5 },
+  { id: 'en:sugar', text: 'Sugar', percent: 20 },
+  { text: 'Natural flavouring' },
+  { id: 'en:e330' },
+]);
+check('ingredients keep list order (rank)', ingredientList.map((i) => i.rank).join(',') === '0,1,2,3');
+check('ingredient text read', ingredientList[0].text === 'Water');
+close('ingredient percent_estimate read', ingredientList[0].percentEstimate, 60.5, 0.01);
+check('ingredient exact percent read', ingredientList[1].percent === 20);
+check('ingredient without id falls back to text', ingredientList[2].text === 'Natural flavouring');
+check('ingredient without text falls back to id', ingredientList[3].text === 'en:e330');
+check(
+  'entries without id or text are dropped',
+  readIngredients([{ percent: 5 }, { id: 'en:salt', text: 'Salt' }]).length === 1
+);
+
+// --- ingredient name resolution inputs ---------------------------------------
+check('displayName defaults to the raw text', ingredientList[0].displayName === 'Water');
+check(
+  'a taxonomy-matched en: id is flagged as taxonomy-recognized',
+  readIngredients([{ id: 'en:skimmed-milk', text: 'Skimmed milk', is_in_taxonomy: 1 }])[0]
+    .idIsTaxonomyRecognized === true
+);
+check(
+  'an id without is_in_taxonomy: 1 is not treated as recognized',
+  readIngredients([{ id: 'en:skimmed-milk', text: 'Skimmed milk' }])[0].idIsTaxonomyRecognized === false
+);
+check(
+  'a non-en: id is not treated as recognized even if flagged in taxonomy',
+  readIngredients([{ id: 'fr:koncentreret', text: 'Koncentreret', is_in_taxonomy: 0 }])[0]
+    .idIsTaxonomyRecognized === false
+);
+
+const dirtyIngredients = readIngredients([
+  { id: 'en:skimmed-milk', text: 'Skimmed milk', percent_estimate: 90 },
+  { text: 'Unopened below +8 °C fat has a minimum shelf life of', percent_estimate: 5 },
+  { text: 'see lid', percent_estimate: 3 },
+  { text: '247kJ', percent_estimate: 1 },
+  { text: 'EU', percent_estimate: 1 },
+  { text: 'Съхранявайте на хладно място' },
+]);
+check('storage/date/certification notes are dropped', dirtyIngredients.length === 1, `${dirtyIngredients.length} left`);
+check('genuine ingredient survives the filter', dirtyIngredients[0]?.text === 'Skimmed milk');
+check('rank is re-indexed after dropping junk entries', dirtyIngredients[0]?.rank === 0);
+
+// --- ingredients text: per-language field discovery ---------------------------
+const byLang = readIngredientsTextByLanguage({
+  ingredients_text_en: 'Sugar, palm oil, hazelnuts',
+  ingredients_text_bg: 'Захар, палмово масло, лешници',
+  ingredients_text_fr: 'Sucre, huile de palme, noisettes',
+  ingredients_text_de: '',
+  ingredients_text_en_ocr_1642445989: 'ingredients: sugar, palm oil',
+  ingredients_text_en_ocr_1642445989_result: 'Sugar, palm oil',
+  ingredients_text_with_allergens: 'Sugar, <span>palm oil</span>',
+  ingredients_text_fr_imported: 'Sucre, huile de palme',
+});
+check('language fields are discovered for en/bg/fr', Object.keys(byLang).sort().join(',') === 'bg,en,fr');
+check('an empty-string language field is dropped', !('de' in byLang));
+check('an OCR debug field is not treated as its own language', !('en_ocr_1642445989' in byLang));
+check('a "with_allergens" field is not treated as a language field', Object.keys(byLang).every((k) => k.length <= 3));
+check('an "_imported"-suffixed field is not treated as its own language', !('fr_imported' in byLang));
+
+check('a one-word fragment is not substantial', isSubstantialIngredientsText('Salt') === false);
+check('a real ingredient list is substantial', isSubstantialIngredientsText('Sugar, palm oil, hazelnuts') === true);
+check(
+  'a thin fragment is excluded from the language map entirely',
+  Object.keys(readIngredientsTextByLanguage({ ingredients_text_it: 'Sale' })).length === 0
+);
+
+// --- ingredients text: single-source-of-truth language selection --------------
+check(
+  'selection prefers the target language',
+  selectIngredientsTextSource({ en: 'Sugar, salt, water', bg: 'Захар, сол, вода' }, 'bg')?.lang === 'bg'
+);
+check(
+  'selection falls back to the other supported language',
+  selectIngredientsTextSource({ en: 'Sugar, salt, water, oil' }, 'bg')?.lang === 'en'
+);
+check(
+  'selection falls back to the fullest remaining language, ignoring thin ones',
+  selectIngredientsTextSource(
+    { fr: 'Sucre, sel', de: 'Zucker, Salz, Wasser, noch mehr Text hier' },
+    'bg'
+  )?.lang === 'de'
+);
+check('no candidates at all resolves to null', selectIngredientsTextSource({}, 'bg') === null);
+
+// --- ingredients text: split -> filter -> dedupe pipeline ---------------------
+check(
+  'splits on top-level commas only, keeping parenthetical sub-lists intact',
+  splitIngredientsText('Sugar, vegetable fat (palm, shea), hazelnuts').join('|') ===
+    'Sugar|vegetable fat (palm, shea)|hazelnuts'
+);
+check(
+  'a European-style decimal comma in an unparenthesized percentage is not treated as a separator',
+  splitIngredientsText('Sugar, cacao maigre 7,4%, milk powder').join('|') === 'Sugar|cacao maigre|milk powder'
+);
+check(
+  'a trailing percent annotation is stripped (percent comes from the matched structured entry instead)',
+  splitIngredientsText('Hazelnuts (13%), cocoa 7,4%').join('|') === 'Hazelnuts|cocoa'
+);
+check(
+  'a leading "Ingredients:" label is stripped before splitting',
+  stripIngredientsLabelPrefix('Ingredients: Sugar, salt') === 'Sugar, salt'
+);
+check(
+  'the existing non-ingredient-note filter drops boilerplate mixed into the split items',
+  splitIngredientsText('Sugar, best before see lid, salt')
+    .filter((item) => !looksLikeNonIngredientNote(item))
+    .join('|') === 'Sugar|salt'
+);
+check(
+  'exact case/punctuation-insensitive duplicates are removed',
+  dedupeIngredientItems(['Sugar', 'salt', 'SUGAR.', 'Salt']).join('|') === 'Sugar|salt'
+);
+
+const built = buildIngredientsFromSource(
+  { lang: 'en', text: 'Sugar, palm oil, hazelnuts' },
+  [
+    {
+      id: 'en:sugar',
+      text: 'Sucre',
+      rank: 0,
+      percent: null,
+      percentEstimate: 55,
+      idIsTaxonomyRecognized: true,
+      displayName: 'Sucre',
+      displayNameIsFallback: false,
+    },
+    {
+      id: 'en:palm-oil',
+      text: 'Huile de palme',
+      rank: 1,
+      percent: null,
+      percentEstimate: 30,
+      idIsTaxonomyRecognized: true,
+      displayName: 'Huile de palme',
+      displayNameIsFallback: false,
+    },
+  ]
+);
+check('built ingredients follow the split order, not the structured array\'s own text', built.map((i) => i.text).join('|') === 'Sugar|palm oil|hazelnuts');
+check('percent data is matched onto the cleaned list by position', built[0].percentEstimate === 55 && built[1].percentEstimate === 30);
+check('taxonomy id is carried over by position (id is language-neutral, unlike text)', built[0].id === 'en:sugar' && built[0].idIsTaxonomyRecognized === true);
+check('an item past the structured array\'s end has no percent or id', built[2].percentEstimate === null && built[2].id === null);
+
+// --- full product assembly: single source of truth end to end -----------------
+const ingredientsProduct = toIngredientsProduct({
+  code: '3017620422003',
+  product_name: 'Nutella',
+  brands: 'Ferrero',
+  ingredients_text: 'Sugar, palm oil, hazelnuts',
+  ingredients_text_en: 'Sugar, palm oil, hazelnuts',
+  ingredients: [
+    { id: 'en:sugar', text: 'Sugar', percent_estimate: 55 },
+    { id: 'en:palm-oil', text: 'Palm oil', percent_estimate: 30 },
+  ],
+})!;
+check('ingredients product name read', ingredientsProduct.name === 'Nutella');
+check('ingredients product text read', ingredientsProduct.ingredientsText === 'Sugar, palm oil, hazelnuts');
+check(
+  'ingredients product list is built from ingredients_text, not the structured array\'s own length',
+  ingredientsProduct.ingredients.length === 3
+);
+check('ingredients product without code is dropped', toIngredientsProduct({ product_name: 'X' }) === null);
+check(
+  'ingredients product with no ingredients_text in any language reports no data, ignoring the structured array',
+  toIngredientsProduct({
+    code: '9',
+    product_name: 'X',
+    ingredients: [{ id: 'en:sugar', text: 'Sugar', percent_estimate: 55 }],
+  })?.ingredients.length === 0
+);
+check(
+  'a bare ingredients_text field with no language suffix is still used as a last resort',
+  toIngredientsProduct({ code: '10', product_name: 'X', ingredients_text: 'Sugar, salt, water, oil' })
+    ?.ingredientsText === 'Sugar, salt, water, oil'
+);
+
+const bgProduct = toIngredientsProduct(
+  {
+    code: '3017620422003',
+    product_name: 'Nutella',
+    product_name_bg: 'Нутела',
+    ingredients_text: 'Захар, палмово масло, лешници',
+    ingredients_text_bg: 'Захар, палмово масло, лешници',
+  },
+  'bg'
+)!;
+check('bg lookup prefers product_name_bg', bgProduct.name === 'Нутела');
+check('bg lookup prefers ingredients_text_bg', bgProduct.ingredientsText === 'Захар, палмово масло, лешници');
+check('bg text from its own field is not flagged as a language gap', bgProduct.ingredientsTextLanguageGap === false);
+check('bg ingredients list is built from the bg text, not the (absent here) structured array', bgProduct.ingredients.length === 3);
+
+const bgProductEnOnly = toIngredientsProduct(
+  {
+    code: '3017620422003',
+    product_name: 'Nutella',
+    ingredients_text: 'Sugar, palm oil, hazelnuts',
+    ingredients_text_en: 'Sugar, palm oil, hazelnuts',
+  },
+  'bg'
+)!;
+check(
+  'bg lookup falls back to English before any third language',
+  bgProductEnOnly.ingredientsText === 'Sugar, palm oil, hazelnuts'
+);
+check(
+  'falling back to the other supported language is flagged as a language gap',
+  bgProductEnOnly.ingredientsTextLanguageGap === true
+);
+
+const bgProductThirdLanguageOnly = toIngredientsProduct(
+  {
+    code: '3017620422003',
+    product_name: 'Nutella',
+    ingredients_text: 'Zucker, Palmöl, Haselnüsse',
+    ingredients_text_de: 'Zucker, Palmöl, Haselnüsse',
+  },
+  'bg'
+)!;
+check(
+  'bg lookup falls back to a third language when neither bg nor en is available',
+  bgProductThirdLanguageOnly.ingredientsText === 'Zucker, Palmöl, Haselnüsse'
+);
+check(
+  'falling back to a third language is flagged as a language gap',
+  bgProductThirdLanguageOnly.ingredientsTextLanguageGap === true
+);
+check(
+  'the ingredient list is still built (split from the German text) even though it needs translating',
+  bgProductThirdLanguageOnly.ingredients.map((i) => i.text).join('|') === 'Zucker|Palmöl|Haselnüsse'
+);
+
+const noStructuredIngredients = toIngredientsProduct(
+  { code: '3017620422003', product_name: 'Nutella', ingredients_text: 'Sugar, palm oil, hazelnuts' },
+  'en'
+)!;
+check(
+  'a product with ingredients_text but no structured array still gets a full item list, just with no percent data',
+  noStructuredIngredients.ingredients.map((i) => i.text).join('|') === 'Sugar|palm oil|hazelnuts' &&
+    noStructuredIngredients.ingredients.every((i) => i.percent === null && i.percentEstimate === null)
+);
+
 // --- query building ---------------------------------------------------------
 const localUrl = buildSearchUrl('oats', 12, 'en:bulgaria');
 check('country tag is added as a filter', localUrl.includes('countries_tags'), localUrl);
@@ -157,6 +425,45 @@ if (process.argv.includes('--offline')) {
 
     const nothing = await searchFoods('zzzqqqxxnotathing');
     check('a no-match search returns an empty list, not an error', nothing.products.length === 0);
+
+    const foundIngredients = await fetchIngredientsByBarcode('3017620422003');
+    check('known barcode resolves ingredients', foundIngredients !== null, foundIngredients?.name ?? 'null');
+    check(
+      'known barcode has ingredient text or a structured list',
+      Boolean(foundIngredients?.ingredientsText) || (foundIngredients?.ingredients.length ?? 0) > 0
+    );
+    check(
+      'the built ingredient list is entirely a single, consistent language (every item, not the mix the raw structured array carries)',
+      (foundIngredients?.ingredients.length ?? 0) > 0,
+      JSON.stringify(foundIngredients?.ingredients.map((i) => i.text))
+    );
+    check(
+      'at least one item in a well-known product carries a percent/percentEstimate matched from the structured array',
+      (foundIngredients?.ingredients.some((i) => i.percent !== null || i.percentEstimate !== null) ?? false),
+      JSON.stringify(foundIngredients?.ingredients.map((i) => [i.text, i.percent, i.percentEstimate]))
+    );
+
+    const foundIngredientsBg = await fetchIngredientsByBarcode('3017620422003', 'bg');
+    check(
+      'the same barcode requested in bg resolves too, and its ingredient list is non-empty',
+      (foundIngredientsBg?.ingredients.length ?? 0) > 0,
+      JSON.stringify(foundIngredientsBg?.ingredients.map((i) => i.text))
+    );
+
+    const taxonomyNames = await fetchIngredientTaxonomyNames(['en:cow-s-milk', 'en:sugar'], 'bg');
+    check(
+      'taxonomy lookup returns a real localized name (with the apostrophe intact, unlike a formatted id)',
+      taxonomyNames['en:cow-s-milk']?.localized === 'краве мляко',
+      JSON.stringify(taxonomyNames['en:cow-s-milk'])
+    );
+    check(
+      'taxonomy lookup carries the English name alongside the Bulgarian one',
+      taxonomyNames['en:cow-s-milk']?.english === "cow's milk"
+    );
+    check('taxonomy lookup resolves a second common ingredient too', typeof taxonomyNames['en:sugar']?.localized === 'string');
+
+    const emptyTaxonomy = await fetchIngredientTaxonomyNames([], 'bg');
+    check('an empty id list makes no request and returns an empty result', Object.keys(emptyTaxonomy).length === 0);
   } catch (err) {
     failures += 1;
     console.log(`FAIL  live checks threw — ${err instanceof Error ? err.message : String(err)}`);

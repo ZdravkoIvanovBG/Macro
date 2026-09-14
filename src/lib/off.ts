@@ -10,10 +10,12 @@
  *
  * No API key, no account, no request body — everything is a plain GET.
  */
+import i18n, { type AppLanguage } from '../i18n/index';
 import type { EntryPrefill, Nutrition } from './types';
 
 const SEARCH_URL = 'https://search.openfoodfacts.org/search';
 const PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product';
+const TAXONOMY_URL = 'https://world.openfoodfacts.org/api/v2/taxonomy';
 
 /** Open Food Facts asks every client to identify itself. */
 const USER_AGENT = 'Micro/1.0 (personal calorie tracker; Expo)';
@@ -48,6 +50,14 @@ const PRODUCT_FIELDS = [
 ].join(',');
 
 /**
+ * The ingredients lookup requests every field ("all") rather than a curated
+ * list, because it needs to see every `ingredients_text_<lang>` field the
+ * product has — the set of languages varies per product and isn't knowable
+ * in advance. See `readIngredientsTextByLanguage`.
+ */
+const INGREDIENTS_FIELDS = 'all';
+
+/**
  * The search index stores country tags as `en:bulgaria`, and only that form is
  * queryable — the `countries_tags_en` field returns nothing. This is used as a
  * bias, never as an exclusion: results without it are still shown, just below.
@@ -72,16 +82,16 @@ export function describeOffError(err: unknown): string {
   if (err instanceof OffError) {
     switch (err.kind) {
       case 'offline':
-        return 'No connection. Search and barcode lookups need the internet — everything else in the app works offline.';
+        return i18n.t('off.errorOffline');
       case 'timeout':
-        return 'Open Food Facts took too long to answer. Try again in a moment.';
+        return i18n.t('off.errorTimeout');
       case 'http':
-        return `Open Food Facts returned an error (${err.message}).`;
+        return i18n.t('off.errorHttp', { status: err.message });
       default:
-        return 'Open Food Facts sent something this app could not read.';
+        return i18n.t('off.errorMalformed');
     }
   }
-  return err instanceof Error ? err.message : 'Something went wrong.';
+  return err instanceof Error ? err.message : i18n.t('common.somethingWrong');
 }
 
 export interface OffProduct {
@@ -103,6 +113,76 @@ export interface OffSearchResult {
   products: OffProduct[];
   /** Total matches reported for the unfiltered query. */
   total: number;
+}
+
+export interface OffIngredient {
+  /** OFF taxonomy id, e.g. "en:e330" — present for recognised ingredients. */
+  id: string | null;
+  /**
+   * Display text as OFF has it — verbatim from the product's own label, in
+   * whatever language that happened to be entered in. NOT translated by the
+   * `lc` request param (only `ingredients_text_*` and `product_name_*` are);
+   * unrelated ingredients on the same product routinely arrive in different
+   * languages. Never rendered directly — see `displayName`.
+   */
+  text: string;
+  /** List position — the label order, most to least by quantity. */
+  rank: number;
+  /** Disclosed exact percentage, when the manufacturer publishes one. */
+  percent: number | null;
+  /** OFF's own estimate when no exact percentage is disclosed. */
+  percentEstimate: number | null;
+  /**
+   * True when `id` is a genuine taxonomy match (OFF's `is_in_taxonomy`) on
+   * the `en:` (English-canonical) taxonomy, meaning a reliable, language-
+   * neutral display name can be derived from `id` alone. False for ids OFF
+   * invented from unrecognised free text (see `text`'s caveat above).
+   */
+  idIsTaxonomyRecognized: boolean;
+  /**
+   * Name to show the user, resolved to the app's target language. Defaults
+   * to `text` until the name-resolution layer (native/DB-backed, called from
+   * the screen) has a chance to look up a real translated name via
+   * `fetchIngredientTaxonomyNames` and/or the local glossary — mirrors
+   * `ingredientsTextTranslated`'s pattern.
+   */
+  displayName: string;
+  /**
+   * True when `displayName` could not be resolved to the app's target
+   * language and is instead a real (taxonomy-sourced, never formatted-from-
+   * id) English name shown as a last resort — the UI must label this
+   * visibly rather than presenting it as if it were a correct translation.
+   */
+  displayNameIsFallback: boolean;
+}
+
+export interface OffIngredientsProduct {
+  code: string;
+  name: string;
+  brand: string | null;
+  imageUrl: string | null;
+  /** Free-text ingredient list as OFF has it, when there's no structured breakdown. */
+  ingredientsText: string | null;
+  /**
+   * True when `ingredientsText` had to fall back past both the requested
+   * language and the other supported language to the product's untranslated
+   * default field — meaning the text shown is not confirmed to be in a
+   * language the user reads.
+   */
+  ingredientsTextLanguageGap: boolean;
+  /**
+   * True when `ingredientsText` was machine-translated (via DeepL) rather
+   * than sourced directly from Open Food Facts, because neither the
+   * requested nor the other supported language was available. Set by the
+   * translation fallback layer, never by this module.
+   */
+  ingredientsTextTranslated: boolean;
+  ingredients: OffIngredient[];
+  /** NOVA processing classification, 1 (unprocessed) to 4 (ultra-processed). */
+  novaGroup: number | null;
+  /** OFF taxonomy allergen tags, e.g. "en:milk", "en:gluten". */
+  allergensTags: string[];
+  nutriscoreGrade: string | null;
 }
 
 async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
@@ -247,6 +327,337 @@ function toProduct(raw: unknown): OffProduct | null {
   };
 }
 
+/**
+ * OFF's own ingredient parser occasionally spills non-ingredient label text
+ * (storage instructions, best-before notes, certification marks) into the
+ * structured `ingredients` array when a product's source text is messy. This
+ * catches the common shapes of that boilerplate so it isn't shown as if it
+ * were an ingredient.
+ */
+const NON_INGREDIENT_PATTERNS: RegExp[] = [
+  /\d\s*°\s*[CF]\b/i,
+  /\bkj\b|\bkcal\b|\d\s*k(j|cal)\b/i,
+  /\b(best[\s-]?before|use by|sell by|expiry|expires?|shelf life|minimum durability|net weight|store(d)?\s+(below|above|in|at)|keep refrigerated|keep frozen|once opened|unopened|see lid|see (top|bottom|base|packaging))\b/i,
+  // Cyrillic letters fall outside \w in non-unicode regex mode, so \b never
+  // asserts around them — matched as plain substrings instead.
+  /(съхранявайте|срок на годност|годен до|дата на производство|минимален срок)/i,
+  /^\s*(eu|ec|бг|ес)\s*$/i,
+];
+
+export function looksLikeNonIngredientNote(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed === '') return true;
+  return NON_INGREDIENT_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+const MIN_SUBSTANTIAL_INGREDIENTS_TEXT_LENGTH = 15;
+
+/** A stray one-word fragment left behind in an otherwise-unedited language field isn't a usable ingredient list. */
+function isSubstantialIngredientsText(text: string): boolean {
+  return text.trim().length >= MIN_SUBSTANTIAL_INGREDIENTS_TEXT_LENGTH;
+}
+
+/**
+ * Open Food Facts keeps one `ingredients_text_<lang>` field per language a
+ * contributor has entered, each independently editable — which is exactly
+ * why a product's structured `ingredients[]` array (built by parsing
+ * whichever of these was edited most recently) can mix languages between
+ * items (see `OffIngredient.text`'s caveat). This reads every such field
+ * directly off the raw product payload, keyed by language code, as the
+ * single source of truth `selectIngredientsTextSource` picks from instead.
+ *
+ * OFF also emits debug/import variants sharing the same prefix
+ * (`ingredients_text_en_ocr_<timestamp>`, `ingredients_text_with_allergens`,
+ * `ingredients_text_fr_imported`) — the regex's exact `{2,3}`-letter anchor
+ * excludes all of them, leaving only genuine language-code fields.
+ */
+function readIngredientsTextByLanguage(raw: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const match = key.match(/^ingredients_text_([a-z]{2,3})$/);
+    if (!match) continue;
+    const text = firstString(value);
+    if (text && isSubstantialIngredientsText(text)) result[match[1]] = text;
+  }
+  return result;
+}
+
+export interface IngredientsTextSource {
+  /** Language code as OFF names it in the field suffix, e.g. "en", "fr" — not necessarily an `AppLanguage`. */
+  lang: string;
+  text: string;
+}
+
+/**
+ * Picks exactly one language as the single source of truth for a product's
+ * ingredient list, so nothing downstream ever mixes languages within one
+ * product: the app's target language first, then its other supported
+ * language, and only then whichever remaining language has the fullest
+ * text — `byLang` has already dropped thin/near-empty entries (see
+ * `isSubstantialIngredientsText`), so "fullest" never means "only a stray
+ * fragment survived."
+ */
+function selectIngredientsTextSource(
+  byLang: Record<string, string>,
+  targetLang: AppLanguage
+): IngredientsTextSource | null {
+  const otherLang: AppLanguage = targetLang === 'bg' ? 'en' : 'bg';
+  if (byLang[targetLang]) return { lang: targetLang, text: byLang[targetLang] };
+  if (byLang[otherLang]) return { lang: otherLang, text: byLang[otherLang] };
+
+  let best: IngredientsTextSource | null = null;
+  for (const [lang, text] of Object.entries(byLang)) {
+    if (!best || text.length > best.text.length) best = { lang, text };
+  }
+  return best;
+}
+
+const INGREDIENTS_LABEL_PREFIX =
+  /^\s*(ingredients?|ingr[ée]dients?|zutaten|ingredienti|ingredientes|съставки)\s*:\s*/iu;
+
+/** Strips a leading "Ingredients:"-style label so it doesn't get glued onto the first split item. */
+function stripIngredientsLabelPrefix(text: string): string {
+  return text.replace(INGREDIENTS_LABEL_PREFIX, '');
+}
+
+/**
+ * Splits ingredients text into one entry per top-level item. Commas inside
+ * "(...)" or "[...]" — a sub-ingredient breakdown like "vegetable fat
+ * (palm, shea)" — are kept intact rather than treated as new items, and so
+ * is a comma used as a European-style decimal separator in an unparenthesized
+ * percentage ("cacao maigre 7,4%" is one item, not "7" and "4%").
+ */
+function splitIngredientsText(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') depth = Math.max(0, depth - 1);
+
+    const isDecimalComma = char === ',' && /\d/.test(current.slice(-1)) && /\d/.test(text[i + 1] ?? '');
+    if (char === ',' && depth === 0 && !isDecimalComma) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts.map(cleanIngredientItem).filter((item) => item !== '');
+}
+
+/**
+ * A standalone "(13%)" or trailing "13%" is dropped — percent is shown from
+ * the matched structured entry instead (see `buildIngredientsFromSource`),
+ * so keeping it in the label text would just show it twice.
+ */
+function cleanIngredientItem(raw: string): string {
+  return raw
+    .replace(/\(\s*\d+([.,]\d+)?\s*%\s*\)\s*$/u, '')
+    .replace(/\d+([.,]\d+)?\s*%\s*$/u, '')
+    .replace(/^[\s:.-]+|[\s.]+$/gu, '')
+    .trim();
+}
+
+/** Case/punctuation-insensitive exact-duplicate removal — not fuzzy synonym matching. */
+function dedupeIngredientItems(items: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of items) {
+    const key = item
+      .toLowerCase()
+      .replace(/[.,;:()[\]]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (key === '' || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+/**
+ * Builds the ingredient list shown to the user from the single chosen
+ * source-language text (translate → dedupe → filter): split into items,
+ * drop non-ingredient boilerplate, remove exact duplicates. Percent,
+ * quantity, and taxonomy id still come from the structured `ingredients[]`
+ * array as before — matched by position, since that data isn't the
+ * language-inconsistent part, only that array's own per-item name/text is.
+ * A product whose structured array parses to a different item count than
+ * this split naturally loses alignment past the shorter list; percent/id
+ * are simply absent for whichever side runs out first.
+ */
+function buildIngredientsFromSource(
+  source: IngredientsTextSource,
+  structured: OffIngredient[]
+): OffIngredient[] {
+  const items = dedupeIngredientItems(
+    splitIngredientsText(stripIngredientsLabelPrefix(source.text)).filter(
+      (item) => !looksLikeNonIngredientNote(item)
+    )
+  );
+
+  return items.map((text, index) => {
+    const match = structured[index];
+    return {
+      id: match?.id ?? null,
+      text,
+      rank: index,
+      percent: match?.percent ?? null,
+      percentEstimate: match?.percentEstimate ?? null,
+      idIsTaxonomyRecognized: match?.idIsTaxonomyRecognized ?? false,
+      displayName: text,
+      displayNameIsFallback: false,
+    };
+  });
+}
+
+function readIngredients(raw: unknown): OffIngredient[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry): Omit<OffIngredient, 'rank'> | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const e = entry as Record<string, unknown>;
+      const text = firstString(e['text'], e['id']);
+      if (!text || looksLikeNonIngredientNote(text)) return null;
+      const id = firstString(e['id']);
+      return {
+        id,
+        text,
+        percent: num(e['percent']),
+        percentEstimate: num(e['percent_estimate']),
+        idIsTaxonomyRecognized: num(e['is_in_taxonomy']) === 1 && /^en:/i.test(id ?? ''),
+        displayName: text,
+        displayNameIsFallback: false,
+      };
+    })
+    .filter((i): i is Omit<OffIngredient, 'rank'> => i !== null)
+    .map((i, index) => ({ ...i, rank: index }));
+}
+
+/**
+ * Builds the ingredients product, preferring Bulgarian-language fields when
+ * `lang` is 'bg' and falling back to the product's default-language field
+ * only when no Bulgarian version exists.
+ *
+ * Both the free-text ingredient list shown to the user and the raw-text card
+ * beneath it are built from the *same* single chosen source language (see
+ * `selectIngredientsTextSource`), so the two can never disagree about what
+ * language the product's ingredients are shown in.
+ */
+function toIngredientsProduct(raw: unknown, lang: AppLanguage = 'en'): OffIngredientsProduct | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Record<string, unknown>;
+
+  const code = firstString(p['code'], p['_id']);
+  const name =
+    lang === 'bg'
+      ? firstString(p['product_name_bg'], p['product_name'], p['product_name_en'], p['generic_name'])
+      : firstString(p['product_name'], p['product_name_en'], p['generic_name']);
+  if (!code || !name) return null;
+
+  const allergensTags = Array.isArray(p['allergens_tags'])
+    ? (p['allergens_tags'] as unknown[]).filter((a): a is string => typeof a === 'string')
+    : [];
+
+  // Strictly try the requested language, then the other supported language,
+  // and only then whichever remaining language has the fullest text — which
+  // may be in neither of the app's languages (e.g. a product entered only in
+  // Slovenian or German). Falling that far is a real gap in this product's
+  // data, flagged via `ingredientsTextLanguageGap` rather than silently
+  // presented as if it were the requested language.
+  const textByLang = readIngredientsTextByLanguage(p);
+  let source = selectIngredientsTextSource(textByLang, lang);
+  if (!source) {
+    // Rare, but a product can carry the bare (unsuffixed) field with no
+    // matching `ingredients_text_<lang>` counterpart — e.g. an older import.
+    // Its language is unknown, so it's used only as an absolute last resort,
+    // and always flagged as a gap (never assumed to already be `lang`).
+    const bareText = firstString(p['ingredients_text']);
+    if (bareText && isSubstantialIngredientsText(bareText)) source = { lang: 'unknown', text: bareText };
+  }
+  const ingredientsText = source?.text ?? null;
+  const ingredientsTextLanguageGap = source !== null && source.lang !== lang;
+  const structuredIngredients = readIngredients(p['ingredients']);
+  const ingredients = source ? buildIngredientsFromSource(source, structuredIngredients) : [];
+
+  return {
+    code,
+    name,
+    brand: readBrand(p['brands']),
+    imageUrl: firstString(p['image_front_small_url'], p['image_small_url'], p['image_url']),
+    ingredientsText,
+    ingredientsTextLanguageGap,
+    ingredientsTextTranslated: false,
+    ingredients,
+    novaGroup: num(p['nova_group']),
+    allergensTags,
+    nutriscoreGrade: firstString(p['nutriscore_grade']),
+  };
+}
+
+export interface IngredientTaxonomyName {
+  /** The taxonomy's name for this id in the requested language, when a translation exists. */
+  localized: string | null;
+  /**
+   * The taxonomy's own canonical English name (e.g. "cow's milk" for
+   * "en:cow-s-milk") — a real, correctly-formatted name, never one derived
+   * by reformatting the id itself. Used as a last-resort, clearly-labeled
+   * fallback when `localized` is null.
+   */
+  english: string | null;
+}
+
+function readTaxonomyNames(payload: unknown, lang: AppLanguage): Record<string, IngredientTaxonomyName> {
+  const result: Record<string, IngredientTaxonomyName> = {};
+  if (!payload || typeof payload !== 'object') return result;
+
+  for (const [id, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const name = (value as Record<string, unknown>)['name'];
+    if (!name || typeof name !== 'object') continue;
+    const names = name as Record<string, unknown>;
+    result[id] = {
+      localized: firstString(names[lang]),
+      english: firstString(names['en']),
+    };
+  }
+  return result;
+}
+
+/**
+ * Looks up display names for taxonomy ingredient ids (e.g. "en:cow-s-milk")
+ * straight from Open Food Facts' ingredient taxonomy — the authoritative
+ * source of translated ingredient names. This is distinct from a product's
+ * own `ingredients[].text`, which is never translated by the `lc` param (see
+ * the caveat on `OffIngredient.text`) — this is the real fix for that gap.
+ * Requests both the target language and English in a single call, so
+ * callers always have a genuine (not formatted-from-id) English name ready
+ * as a fallback when no translation exists. Ids the taxonomy doesn't
+ * recognise are simply absent from the result, never an error.
+ */
+export async function fetchIngredientTaxonomyNames(
+  ids: string[],
+  lang: AppLanguage,
+  signal?: AbortSignal
+): Promise<Record<string, IngredientTaxonomyName>> {
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => id !== '')));
+  if (unique.length === 0) return {};
+
+  const lc = lang === 'en' ? 'en' : `${lang},en`;
+  const params = new URLSearchParams({
+    tagtype: 'ingredients',
+    tags: unique.join(','),
+    fields: 'name',
+    lc,
+  });
+
+  const payload = await getJson(`${TAXONOMY_URL}?${params.toString()}`, signal);
+  return readTaxonomyNames(payload, lang);
+}
+
 function readHits(payload: unknown): { hits: unknown[]; count: number } {
   if (!payload || typeof payload !== 'object') return { hits: [], count: 0 };
   const body = payload as Record<string, unknown>;
@@ -338,6 +749,36 @@ export async function fetchProductByBarcode(
   return toProduct(body['product']);
 }
 
+/**
+ * Looks up a barcode for its ingredient breakdown, not its calorie/macro data.
+ * `lang` is sent as OFF's `lc` param so taxonomized fields (recognised
+ * ingredients, in particular) come back translated, and is also used to pick
+ * between the language-suffixed fields on the raw response. Resolves to null
+ * when Open Food Facts has no such product (`status: 0`).
+ */
+export async function fetchIngredientsByBarcode(
+  barcode: string,
+  lang: AppLanguage = 'en',
+  signal?: AbortSignal
+): Promise<OffIngredientsProduct | null> {
+  const code = barcode.trim();
+  if (code === '') return null;
+
+  const params = new URLSearchParams({ fields: INGREDIENTS_FIELDS, lc: lang });
+  const payload = await getJson(
+    `${PRODUCT_URL}/${encodeURIComponent(code)}.json?${params.toString()}`,
+    signal
+  );
+
+  if (!payload || typeof payload !== 'object') {
+    throw new OffError('malformed', 'Unexpected product response');
+  }
+  const body = payload as Record<string, unknown>;
+  if (body['status'] === 0 || !body['product']) return null;
+
+  return toIngredientsProduct(body['product'], lang);
+}
+
 /** Seeds the entry form from a product, defaulting to a 100 g portion. */
 export function productToPrefill(
   product: OffProduct,
@@ -358,4 +799,21 @@ export function productToPrefill(
   };
 }
 
-export const __testing = { readPer100, readServingGrams, toProduct, readHits, readBrand, buildSearchUrl };
+export const __testing = {
+  readPer100,
+  readServingGrams,
+  toProduct,
+  readHits,
+  readBrand,
+  buildSearchUrl,
+  readIngredients,
+  toIngredientsProduct,
+  readTaxonomyNames,
+  readIngredientsTextByLanguage,
+  selectIngredientsTextSource,
+  splitIngredientsText,
+  stripIngredientsLabelPrefix,
+  dedupeIngredientItems,
+  buildIngredientsFromSource,
+  isSubstantialIngredientsText,
+};

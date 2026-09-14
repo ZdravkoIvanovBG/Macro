@@ -3,6 +3,7 @@ import { View, Text, FlatList, Pressable, Alert, ActivityIndicator } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 
 import Screen from '../components/Screen';
 import Card from '../components/Card';
@@ -19,6 +20,7 @@ import type { RootStackParamList } from '../navigation/types';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function LogScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { date, setDate, entries, totals, loading, error, refresh, removeEntry } = useLog();
   const { profile } = useProfile();
@@ -33,25 +35,25 @@ export default function LogScreen() {
 
   const confirmDelete = useCallback(
     (entry: FoodEntry) => {
-      Alert.alert('Delete entry', `Remove "${entry.name}" from your log?`, [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('log.deleteTitle'), t('log.deleteMessage', { name: entry.name }), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await removeEntry(entry.id);
             } catch (err) {
               Alert.alert(
-                'Delete failed',
-                err instanceof Error ? err.message : 'Could not delete the entry.'
+                t('log.deleteFailedTitle'),
+                err instanceof Error ? err.message : t('log.deleteFailedDefault')
               );
             }
           },
         },
       ]);
     },
-    [removeEntry]
+    [removeEntry, t]
   );
 
   const header = (
@@ -66,7 +68,7 @@ export default function LogScreen() {
         >
           <Text className="text-base font-semibold text-white">{formatDayLabel(date)}</Text>
           <Text className="text-[11px] text-neutral-500">
-            {isToday ? formatLongDate(date) : `${formatLongDate(date)} - tap for today`}
+            {isToday ? formatLongDate(date) : t('log.tapForToday', { date: formatLongDate(date) })}
           </Text>
         </Pressable>
         <StepButton
@@ -93,9 +95,7 @@ export default function LogScreen() {
           className="flex-row items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 p-3 active:opacity-70"
         >
           <Ionicons name="person-add-outline" size={18} color={theme.accent} />
-          <Text className="flex-1 text-sm text-accent">
-            Set up your profile to unlock targets.
-          </Text>
+          <Text className="flex-1 text-sm text-accent">{t('log.setupProfile')}</Text>
           <Ionicons name="chevron-forward" size={16} color={theme.accent} />
         </Pressable>
       ) : null}
@@ -103,24 +103,24 @@ export default function LogScreen() {
       <View className="flex-row gap-2">
         <ActionTile
           icon="add-circle-outline"
-          label="Manual"
+          label={t('log.actionManual')}
           onPress={() => navigation.navigate('EntryForm', { date })}
         />
         <ActionTile
           icon="search-outline"
-          label="Search"
+          label={t('log.actionSearch')}
           onPress={() => navigation.navigate('Tabs', { screen: 'Search' })}
         />
         <ActionTile
           icon="barcode-outline"
-          label="Scan"
-          onPress={() => navigation.navigate('Tabs', { screen: 'Scan' })}
+          label={t('log.actionScan')}
+          onPress={() => navigation.navigate('Scan')}
         />
       </View>
 
       {entries.length > 0 ? (
         <Text className="px-1 text-xs uppercase tracking-wide text-neutral-500">
-          {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+          {t('common.entryCount', { count: entries.length })}
         </Text>
       ) : null}
     </View>
@@ -154,9 +154,9 @@ export default function LogScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="restaurant-outline"
-            title={isToday ? 'Nothing logged yet' : 'Nothing logged that day'}
-            message="Add a food manually, search the Open Food Facts database, or scan a barcode."
-            actionLabel="Add food manually"
+            title={isToday ? t('log.emptyTitleToday') : t('log.emptyTitleOther')}
+            message={t('log.emptyMessage')}
+            actionLabel={t('log.addFoodManually')}
             onAction={() => navigation.navigate('EntryForm', { date })}
           />
         }

@@ -3,6 +3,7 @@ import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 
 import Screen from '../components/Screen';
 import Card from '../components/Card';
@@ -24,14 +25,15 @@ import type { RootStackParamList } from '../navigation/types';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const RANGES = [
-  { value: '7', label: '7 days' },
-  { value: '30', label: '30 days' },
-  { value: '90', label: '90 days' },
+  { value: '7', days: 7 },
+  { value: '30', days: 30 },
+  { value: '90', days: 90 },
 ] as const;
 
 type RangeValue = (typeof RANGES)[number]['value'];
 
 export default function HistoryScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { profile } = useProfile();
   const { setDate, version } = useLog();
@@ -52,12 +54,12 @@ export default function HistoryScreen() {
       setError(null);
       setSummaries(await listDaySummaries(from, today));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your history.');
+      setError(err instanceof Error ? err.message : t('history.loadFailedDefault'));
     } finally {
       setLoading(false);
       setSettled(true);
     }
-  }, [from, today]);
+  }, [from, today, t]);
 
   // Reload on focus and after any write elsewhere in the app.
   useFocusEffect(
@@ -96,7 +98,7 @@ export default function HistoryScreen() {
           setLoading(true);
           setRange(value);
         }}
-        options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
+        options={RANGES.map((r) => ({ value: r.value, label: t('history.rangeDays', { count: r.days }) }))}
       />
 
       {error ? (
@@ -109,30 +111,30 @@ export default function HistoryScreen() {
       {stats.loggedDays === 0 ? (
         <EmptyState
           icon="stats-chart-outline"
-          title="No history yet"
-          message={`Nothing was logged in the last ${days} days. Once you log a few days, averages and trends show up here.`}
-          actionLabel="Log something"
+          title={t('history.emptyTitle')}
+          message={t('history.emptyMessage', { days })}
+          actionLabel={t('history.logSomething')}
           onAction={() => navigation.navigate('EntryForm', { date: today })}
         />
       ) : (
         <>
           <Card
-            title="Calories per day"
-            subtitle={`${stats.loggedDays} of ${stats.totalDays} days logged`}
+            title={t('history.caloriesPerDayTitle')}
+            subtitle={t('history.daysLoggedSubtitle', { logged: stats.loggedDays, total: stats.totalDays })}
           >
             <CalorieTrendChart points={points} calorieTarget={profile?.calorie_target ?? null} />
           </Card>
 
           <Card
-            title={`${days}-day average`}
-            subtitle="Averaged over logged days only, so untracked days don't drag it down."
+            title={t('history.averageTitle', { days })}
+            subtitle={t('history.averageSubtitle')}
           >
             <View className="gap-4">
               <View className="flex-row items-end gap-2">
                 <Text className="text-3xl font-bold text-white">
                   {fmtInt(stats.avgCalories)}
                 </Text>
-                <Text className="mb-1 text-sm text-neutral-500">kcal / day</Text>
+                <Text className="mb-1 text-sm text-neutral-500">{t('common.kcalPerDay')}</Text>
               </View>
 
               {profile ? (
@@ -142,49 +144,50 @@ export default function HistoryScreen() {
                     max={profile.calorie_target}
                     color={theme.accent}
                     height={10}
-                    label="vs target"
-                    detail={`${stats.avgDeviation >= 0 ? '+' : '-'}${fmtInt(
-                      Math.abs(stats.avgDeviation)
-                    )} kcal/day`}
+                    label={t('history.vsTarget')}
+                    detail={t('history.deviation', {
+                      sign: stats.avgDeviation >= 0 ? '+' : '-',
+                      value: fmtInt(Math.abs(stats.avgDeviation)),
+                    })}
                   />
                   <View className="gap-3">
                     <ProgressBar
                       value={stats.avgProtein}
                       max={profile.protein_g_target}
                       color={theme.protein}
-                      label="Protein"
+                      label={t('macro.protein')}
                       detail={`${Math.round(stats.avgProtein)} / ${Math.round(
                         profile.protein_g_target
-                      )} g`}
+                      )} ${t('units.g')}`}
                     />
                     <ProgressBar
                       value={stats.avgCarbs}
                       max={profile.carb_g_target}
                       color={theme.carbs}
-                      label="Carbs"
+                      label={t('macro.carbs')}
                       detail={`${Math.round(stats.avgCarbs)} / ${Math.round(
                         profile.carb_g_target
-                      )} g`}
+                      )} ${t('units.g')}`}
                     />
                     <ProgressBar
                       value={stats.avgFat}
                       max={profile.fat_g_target}
                       color={theme.fat}
-                      label="Fat"
+                      label={t('macro.fat')}
                       detail={`${Math.round(stats.avgFat)} / ${Math.round(
                         profile.fat_g_target
-                      )} g`}
+                      )} ${t('units.g')}`}
                     />
                   </View>
 
                   <View className="flex-row gap-2">
                     <Stat
-                      label="On target"
+                      label={t('history.onTarget')}
                       value={`${stats.daysOnTarget}/${stats.loggedDays}`}
-                      hint="within 10%"
+                      hint={t('history.within10')}
                     />
                     <Stat
-                      label="Projected"
+                      label={t('history.projected')}
                       value={
                         projected === null
                           ? '—'
@@ -193,19 +196,19 @@ export default function HistoryScreen() {
                               2
                             )} kg`
                       }
-                      hint="per week"
+                      hint={t('history.perWeek')}
                     />
                   </View>
                 </>
               ) : (
-                <Text className="text-sm leading-5 text-neutral-400">
-                  Set up your profile to compare these averages with targets.
-                </Text>
+                <Text className="text-sm leading-5 text-neutral-400">{t('history.setupProfile')}</Text>
               )}
             </View>
           </Card>
 
-          <Text className="px-1 text-xs uppercase tracking-wide text-neutral-500">Days</Text>
+          <Text className="px-1 text-xs uppercase tracking-wide text-neutral-500">
+            {t('history.daysHeader')}
+          </Text>
 
           <View className="gap-2">
             {[...points]
@@ -245,6 +248,7 @@ function DayRow({
   calorieTarget: number | null;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const summary = point.summary!;
   const diff = calorieTarget !== null ? summary.calories - calorieTarget : null;
 
@@ -260,9 +264,11 @@ function DayRow({
             {formatDayLabel(point.date)}
           </Text>
           <Text className="mt-0.5 text-xs text-neutral-500">
-            {summary.entry_count} {summary.entry_count === 1 ? 'entry' : 'entries'} ·{' '}
-            {Math.round(summary.protein_g)}P {Math.round(summary.carbs_g)}C{' '}
-            {Math.round(summary.fat_g)}F
+            {t('common.entryCount', { count: summary.entry_count })} ·{' '}
+            {Math.round(summary.protein_g)}
+            {t('units.proteinShort')} {Math.round(summary.carbs_g)}
+            {t('units.carbsShort')} {Math.round(summary.fat_g)}
+            {t('units.fatShort')}
           </Text>
         </View>
         <View className="items-end">
@@ -275,7 +281,7 @@ function DayRow({
               {fmtInt(Math.abs(diff))}
             </Text>
           ) : (
-            <Text className="text-[11px] text-neutral-600">kcal</Text>
+            <Text className="text-[11px] text-neutral-600">{t('units.kcal')}</Text>
           )}
         </View>
       </View>

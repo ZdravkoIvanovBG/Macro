@@ -50,6 +50,37 @@ export const MIGRATIONS: ReadonlyArray<string> = [
 
   CREATE INDEX IF NOT EXISTS idx_food_entry_date ON food_entry (date);
   `,
+  // v2 — app settings (key/value), starting with the chosen language
+  `
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
+  // v3 — cached DeepL translations of ingredient text, keyed by product +
+  // language, so a barcode is never sent to the translation API twice.
+  `
+  CREATE TABLE IF NOT EXISTS ingredient_translation (
+    barcode         TEXT NOT NULL,
+    lang            TEXT NOT NULL,
+    translated_text TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    PRIMARY KEY (barcode, lang)
+  );
+  `,
+  // v4 — cached DeepL translations of individual ingredient names, keyed by
+  // the source text itself rather than by product: the same ingredient name
+  // (e.g. "Skimmed milk powder") recurs across thousands of products, so this
+  // cache converges toward zero new translation calls over time.
+  `
+  CREATE TABLE IF NOT EXISTS ingredient_name_translation (
+    source_text     TEXT NOT NULL,
+    lang            TEXT NOT NULL,
+    translated_text TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    PRIMARY KEY (source_text, lang)
+  );
+  `,
 ];
 
 export const SELECT_PROFILE = 'SELECT * FROM profile WHERE id = 1';
@@ -134,6 +165,32 @@ export const SELECT_RECENT_FOODS = `
   LIMIT ?`;
 
 export const DELETE_ALL = 'DELETE FROM food_entry; DELETE FROM profile;';
+
+export const SELECT_SETTING = 'SELECT value FROM settings WHERE key = ?';
+
+export const UPSERT_SETTING = `
+  INSERT INTO settings (key, value) VALUES (?, ?)
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+
+export const SELECT_INGREDIENT_TRANSLATION =
+  'SELECT translated_text FROM ingredient_translation WHERE barcode = ? AND lang = ?';
+
+export const UPSERT_INGREDIENT_TRANSLATION = `
+  INSERT INTO ingredient_translation (barcode, lang, translated_text, created_at)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(barcode, lang) DO UPDATE SET
+    translated_text = excluded.translated_text,
+    created_at = excluded.created_at`;
+
+export const SELECT_INGREDIENT_NAME_TRANSLATION =
+  'SELECT translated_text FROM ingredient_name_translation WHERE source_text = ? AND lang = ?';
+
+export const UPSERT_INGREDIENT_NAME_TRANSLATION = `
+  INSERT INTO ingredient_name_translation (source_text, lang, translated_text, created_at)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(source_text, lang) DO UPDATE SET
+    translated_text = excluded.translated_text,
+    created_at = excluded.created_at`;
 
 /**
  * Parameter builders live next to their statements so column order and bind

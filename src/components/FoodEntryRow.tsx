@@ -1,5 +1,6 @@
 import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { theme } from '../lib/theme';
 import { fmtInt, fmtQuantity } from '../lib/format';
@@ -19,11 +20,12 @@ interface FoodEntryRowProps {
 }
 
 export default function FoodEntryRow({ entry, onPress, onDelete }: FoodEntryRowProps) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Edit ${entry.name}`}
+      accessibilityLabel={t('foodEntryRow.editLabel', { name: entry.name })}
       className="flex-row items-center gap-3 rounded-2xl border border-ink-line bg-ink-soft p-3.5 active:opacity-70"
     >
       <View className="h-9 w-9 items-center justify-center rounded-xl bg-ink">
@@ -39,9 +41,9 @@ export default function FoodEntryRow({ entry, onPress, onDelete }: FoodEntryRowP
           {fmtQuantity(entry.quantity, entry.unit)} - {formatTime(entry.logged_at)}
         </Text>
         <View className="mt-1.5 flex-row gap-2.5">
-          <MacroTag value={entry.protein_g} suffix="P" color={theme.protein} />
-          <MacroTag value={entry.carbs_g} suffix="C" color={theme.carbs} />
-          <MacroTag value={entry.fat_g} suffix="F" color={theme.fat} />
+          <MacroTag value={entry.protein_g} suffix={t('units.proteinShort')} color={theme.protein} />
+          <MacroTag value={entry.carbs_g} suffix={t('units.carbsShort')} color={theme.carbs} />
+          <MacroTag value={entry.fat_g} suffix={t('units.fatShort')} color={theme.fat} />
         </View>
       </View>
 
@@ -50,7 +52,7 @@ export default function FoodEntryRow({ entry, onPress, onDelete }: FoodEntryRowP
         <Pressable
           onPress={onDelete}
           accessibilityRole="button"
-          accessibilityLabel={`Delete ${entry.name}`}
+          accessibilityLabel={t('foodEntryRow.deleteLabel', { name: entry.name })}
           hitSlop={10}
           className="active:opacity-60"
         >

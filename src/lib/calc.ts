@@ -17,28 +17,26 @@ export const DEFAULT_RATE_KCAL = 500;
 /** Ceiling for a bulk surplus; there is no physiological anchor, this is just sane. */
 export const MAX_SURPLUS_KCAL = 1000;
 
+/**
+ * Display copy (label/hint) lives in the i18n resources under `activity.<value>`,
+ * looked up by callers — this file stays pure data + logic for check-calc.mts.
+ */
 export const ACTIVITY_LEVELS: ReadonlyArray<{
   value: ActivityLevel;
-  label: string;
-  hint: string;
   multiplier: number;
 }> = [
-  { value: 'sedentary', label: 'Sedentary', hint: 'Little or no exercise', multiplier: 1.2 },
-  { value: 'light', label: 'Light', hint: 'Exercise 1–3 days/week', multiplier: 1.375 },
-  { value: 'moderate', label: 'Moderate', hint: 'Exercise 3–5 days/week', multiplier: 1.55 },
-  { value: 'active', label: 'Active', hint: 'Exercise 6–7 days/week', multiplier: 1.725 },
-  {
-    value: 'very_active',
-    label: 'Very active',
-    hint: 'Hard daily exercise + physical job',
-    multiplier: 1.9,
-  },
+  { value: 'sedentary', multiplier: 1.2 },
+  { value: 'light', multiplier: 1.375 },
+  { value: 'moderate', multiplier: 1.55 },
+  { value: 'active', multiplier: 1.725 },
+  { value: 'very_active', multiplier: 1.9 },
 ];
 
-export const GOALS: ReadonlyArray<{ value: Goal; label: string; verb: string }> = [
-  { value: 'cut', label: 'Cut', verb: 'Deficit' },
-  { value: 'maintain', label: 'Maintain', verb: 'Adjustment' },
-  { value: 'bulk', label: 'Bulk', verb: 'Surplus' },
+/** Display copy (label/verb) lives in the i18n resources under `goals.<value>`. */
+export const GOALS: ReadonlyArray<{ value: Goal }> = [
+  { value: 'cut' },
+  { value: 'maintain' },
+  { value: 'bulk' },
 ];
 
 export function activityMultiplier(level: ActivityLevel): number {

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { getProfile, saveProfile } from '../db/profile';
 import type { Profile, ProfileInput } from '../lib/types';
@@ -23,6 +24,7 @@ interface ProfileContextValue {
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +34,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setError(null);
       setProfile(await getProfile());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your profile.');
+      setError(err instanceof Error ? err.message : t('profile.loadFailedDefault'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void reload();

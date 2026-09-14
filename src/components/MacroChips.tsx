@@ -1,4 +1,5 @@
 import { View, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { theme } from '../lib/theme';
 import { fmtGrams } from '../lib/format';
@@ -21,10 +22,11 @@ export default function MacroChips({
   carbsOf,
   fatOf,
 }: MacroChipsProps) {
+  const { t } = useTranslation();
   const items = [
-    { label: 'Protein', value: protein, of: proteinOf, color: theme.protein },
-    { label: 'Carbs', value: carbs, of: carbsOf, color: theme.carbs },
-    { label: 'Fat', value: fat, of: fatOf, color: theme.fat },
+    { label: t('macro.protein'), value: protein, of: proteinOf, color: theme.protein },
+    { label: t('macro.carbs'), value: carbs, of: carbsOf, color: theme.carbs },
+    { label: t('macro.fat'), value: fat, of: fatOf, color: theme.fat },
   ];
 
   return (
@@ -44,7 +46,9 @@ export default function MacroChips({
             {fmtGrams(item.value)}
           </Text>
           {item.of !== undefined ? (
-            <Text className="text-[11px] text-neutral-500">of {fmtGrams(item.of)}</Text>
+            <Text className="text-[11px] text-neutral-500">
+              {t('macroChips.of', { value: fmtGrams(item.of) })}
+            </Text>
           ) : null}
         </View>
       ))}

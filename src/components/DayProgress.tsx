@@ -1,4 +1,5 @@
 import { View, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import ProgressBar from './ProgressBar';
 import { theme } from '../lib/theme';
@@ -14,12 +15,10 @@ interface DayProgressProps {
 
 /** Today's intake against the saved targets. */
 export default function DayProgress({ totals, profile, compact = false }: DayProgressProps) {
+  const { t } = useTranslation();
+
   if (!profile) {
-    return (
-      <Text className="text-sm leading-5 text-neutral-400">
-        Set up your profile to see how today compares with your targets.
-      </Text>
-    );
+    return <Text className="text-sm leading-5 text-neutral-400">{t('dayProgress.setupProfile')}</Text>;
   }
 
   const remaining = profile.calorie_target - totals.calories;
@@ -27,13 +26,13 @@ export default function DayProgress({ totals, profile, compact = false }: DayPro
 
   const macros = [
     {
-      key: 'Protein',
+      key: t('macro.protein'),
       value: totals.protein_g,
       target: profile.protein_g_target,
       color: theme.protein,
     },
-    { key: 'Carbs', value: totals.carbs_g, target: profile.carb_g_target, color: theme.carbs },
-    { key: 'Fat', value: totals.fat_g, target: profile.fat_g_target, color: theme.fat },
+    { key: t('macro.carbs'), value: totals.carbs_g, target: profile.carb_g_target, color: theme.carbs },
+    { key: t('macro.fat'), value: totals.fat_g, target: profile.fat_g_target, color: theme.fat },
   ];
 
   return (
@@ -53,7 +52,7 @@ export default function DayProgress({ totals, profile, compact = false }: DayPro
             <Text className={`text-xl font-semibold ${over ? 'text-red-400' : 'text-accent'}`}>
               {fmtInt(Math.abs(remaining))}
             </Text>
-            <Text className="text-xs text-neutral-500">{over ? 'over' : 'left'}</Text>
+            <Text className="text-xs text-neutral-500">{over ? t('dayProgress.over') : t('dayProgress.left')}</Text>
           </View>
         </View>
       ) : null}
@@ -63,10 +62,10 @@ export default function DayProgress({ totals, profile, compact = false }: DayPro
         max={profile.calorie_target}
         color={theme.accent}
         height={10}
-        label={compact ? 'Calories' : undefined}
+        label={compact ? t('common.calories') : undefined}
         detail={
           compact
-            ? `${fmtInt(totals.calories)} / ${fmtInt(profile.calorie_target)} kcal`
+            ? `${fmtInt(totals.calories)} / ${fmtInt(profile.calorie_target)} ${t('units.kcal')}`
             : undefined
         }
       />
@@ -86,7 +85,7 @@ export default function DayProgress({ totals, profile, compact = false }: DayPro
 
       {totals.fiber_g > 0 ? (
         <Text className="text-xs text-neutral-500">
-          Fibre logged today: {Math.round(totals.fiber_g)} g
+          {t('dayProgress.fibreLogged', { grams: Math.round(totals.fiber_g) })}
         </Text>
       ) : null}
     </View>

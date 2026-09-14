@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   createEntry,
@@ -48,6 +49,7 @@ interface LogContextValue {
 const LogContext = createContext<LogContextValue | null>(null);
 
 export function LogProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [date, setDate] = useState<string>(todayKey);
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [totals, setTotals] = useState<DayTotals>(EMPTY_TOTALS);
@@ -65,11 +67,11 @@ export function LogProvider({ children }: { children: ReactNode }) {
       setEntries(rows);
       setTotals(sums);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your log.');
+      setError(err instanceof Error ? err.message : t('log.loadFailedDefault'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setLoading(true);

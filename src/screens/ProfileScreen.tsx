@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import Screen from '../components/Screen';
 import Card from '../components/Card';
@@ -10,6 +11,7 @@ import OptionList from '../components/OptionList';
 import NumberField from '../components/NumberField';
 import MacroChips from '../components/MacroChips';
 import { useProfile } from '../state/ProfileContext';
+import { useSettings } from '../state/SettingsContext';
 import { theme } from '../lib/theme';
 import { fmtDecimal, fmtInt, parseNumber } from '../lib/format';
 import {
@@ -36,14 +38,20 @@ interface Draft {
 }
 
 const LIMITS = {
-  age: { min: 14, max: 100, label: 'Age must be between 14 and 100.' },
-  height_cm: { min: 120, max: 230, label: 'Height must be between 120 and 230 cm.' },
-  weight_kg: { min: 30, max: 300, label: 'Weight must be between 30 and 300 kg.' },
-  protein_g_per_kg: { min: 0.5, max: 4, label: 'Protein must be between 0.5 and 4 g/kg.' },
-  fat_g_per_kg: { min: 0.2, max: 3, label: 'Fat must be between 0.2 and 3 g/kg.' },
+  age: { min: 14, max: 100 },
+  height_cm: { min: 120, max: 230 },
+  weight_kg: { min: 30, max: 300 },
+  protein_g_per_kg: { min: 0.5, max: 4 },
+  fat_g_per_kg: { min: 0.2, max: 3 },
 } as const;
 
 type NumericKey = keyof typeof LIMITS;
+
+/** Autonyms — each language names itself, so this list never gets translated. */
+const LANGUAGE_OPTIONS = [
+  { value: 'en' as const, label: 'English' },
+  { value: 'bg' as const, label: 'Български' },
+];
 
 function toDraft(input: ProfileInput): Draft {
   return {
@@ -60,7 +68,9 @@ function toDraft(input: ProfileInput): Draft {
 }
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const { profile, loading, error, save } = useProfile();
+  const { language, setLanguage } = useSettings();
   const [draft, setDraft] = useState<Draft>(() => toDraft(DEFAULT_PROFILE_INPUT));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -75,13 +85,13 @@ export default function ProfileScreen() {
     (Object.keys(LIMITS) as NumericKey[]).forEach((key) => {
       const value = parseNumber(draft[key]);
       if (value === null) {
-        errors[key] = 'Required.';
+        errors[key] = t('common.required');
       } else if (value < LIMITS[key].min || value > LIMITS[key].max) {
-        errors[key] = LIMITS[key].label;
+        errors[key] = t(`profile.limits.${key}`, { min: LIMITS[key].min, max: LIMITS[key].max });
       }
     });
     return errors;
-  }, [draft]);
+  }, [draft, t]);
 
   const isValid = Object.keys(fieldErrors).length === 0;
 
@@ -148,9 +158,9 @@ export default function ProfileScreen() {
       const clampedRate = Math.max(0, Math.min(input.rate_kcal_per_day, rateCap));
       await save({ ...input, rate_kcal_per_day: clampedRate });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save your profile.';
+      const message = err instanceof Error ? err.message : t('profile.saveFailedDefault');
       setSaveError(message);
-      Alert.alert('Save failed', message);
+      Alert.alert(t('profile.saveFailedTitle'), message);
     } finally {
       setSaving(false);
     }
@@ -161,13 +171,14 @@ export default function ProfileScreen() {
       <Screen scroll={false}>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={theme.accent} />
-          <Text className="mt-3 text-sm text-neutral-500">Loading your profile…</Text>
+          <Text className="mt-3 text-sm text-neutral-500">{t('profile.loading')}</Text>
         </View>
       </Screen>
     );
   }
 
-  const goalMeta = GOALS.find((g) => g.value === draft.goal)!;
+  const goalLabel = t(`goals.${draft.goal}.label`);
+  const goalVerb = t(`goals.${draft.goal}.verb`);
   const effectiveRate = Math.max(0, Math.min(typedRate, rateCap));
   const weeklyChange = weeklyWeightChangeKg(effectiveRate);
 
@@ -183,19 +194,17 @@ export default function ProfileScreen() {
       {!profile ? (
         <View className="flex-row items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-3">
           <Ionicons name="sparkles-outline" size={18} color={theme.accent} />
-          <Text className="flex-1 text-sm leading-5 text-accent">
-            Welcome. Fill in your details and save to start tracking against real targets.
-          </Text>
+          <Text className="flex-1 text-sm leading-5 text-accent">{t('profile.welcome')}</Text>
         </View>
       ) : null}
 
       {/* Live preview — recomputes from the draft on every keystroke. */}
       <Card
-        title="Daily targets"
+        title={t('profile.targetsTitle')}
         subtitle={
           targets
-            ? `Mifflin-St Jeor - ${goalMeta.label.toLowerCase()}`
-            : 'Fix the highlighted fields to see your targets'
+            ? t('profile.targetsSubtitleReady', { goal: goalLabel.toLowerCase() })
+            : t('profile.targetsSubtitleInvalid')
         }
       >
         {targets ? (
@@ -204,7 +213,7 @@ export default function ProfileScreen() {
               <Text className="text-4xl font-bold text-accent">
                 {fmtInt(targets.calorie_target)}
               </Text>
-              <Text className="mb-1.5 text-sm text-neutral-500">kcal / day</Text>
+              <Text className="mb-1.5 text-sm text-neutral-500">{t('common.kcalPerDay')}</Text>
             </View>
 
             <MacroChips
@@ -214,13 +223,13 @@ export default function ProfileScreen() {
             />
 
             <View className="flex-row gap-2">
-              <Stat label="BMR" value={`${fmtInt(targets.bmr)} kcal`} />
-              <Stat label="TDEE" value={`${fmtInt(targets.tdee)} kcal`} />
+              <Stat label={t('profile.bmr')} value={`${fmtInt(targets.bmr)} ${t('units.kcal')}`} />
+              <Stat label={t('profile.tdee')} value={`${fmtInt(targets.tdee)} ${t('units.kcal')}`} />
               <Stat
-                label={goalMeta.verb}
+                label={goalVerb}
                 value={
                   draft.goal === 'maintain'
-                    ? 'None'
+                    ? t('profile.none')
                     : `${draft.goal === 'cut' ? '-' : '+'}${fmtInt(effectiveRate)}`
                 }
               />
@@ -228,8 +237,10 @@ export default function ProfileScreen() {
 
             {draft.goal !== 'maintain' && weeklyChange > 0 ? (
               <Text className="text-xs text-neutral-500">
-                About {fmtDecimal(weeklyChange, 2)} kg/week{' '}
-                {draft.goal === 'cut' ? 'loss' : 'gain'} at this rate.
+                {t('profile.weeklyChange', {
+                  value: fmtDecimal(weeklyChange, 2),
+                  direction: t(draft.goal === 'cut' ? 'profile.loss' : 'profile.gain'),
+                })}
               </Text>
             ) : null}
 
@@ -237,51 +248,46 @@ export default function ProfileScreen() {
               <View className="flex-row items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5">
                 <Ionicons name="warning-outline" size={16} color="#fbbf24" />
                 <Text className="flex-1 text-xs leading-4 text-amber-300">
-                  Protein and fat already use your whole calorie target, leaving no carbs. Lower
-                  one of them or raise your calories.
+                  {t('profile.overshootWarning')}
                 </Text>
               </View>
             ) : null}
           </View>
         ) : (
-          <Text className="text-sm text-neutral-500">
-            Enter valid values below and your targets will appear here.
-          </Text>
+          <Text className="text-sm text-neutral-500">{t('profile.targetsEmpty')}</Text>
         )}
       </Card>
 
-      <Card title="About you">
+      <Card title={t('profile.aboutYouTitle')}>
         <View className="gap-4">
           <View>
             <Text className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-500">
-              Sex
+              {t('profile.sexLabel')}
             </Text>
             <Segmented
               value={draft.sex}
               onChange={(value) => set('sex', value)}
               options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
+                { value: 'male', label: t('profile.male') },
+                { value: 'female', label: t('profile.female') },
               ]}
             />
-            <Text className="mt-1 text-xs text-neutral-500">
-              Sets the Mifflin-St Jeor constant (+5 for male, -161 for female).
-            </Text>
+            <Text className="mt-1 text-xs text-neutral-500">{t('profile.sexHint')}</Text>
           </View>
 
           <View className="flex-row gap-3">
             <NumberField
               className="flex-1"
-              label="Age"
-              suffix="yrs"
+              label={t('profile.ageLabel')}
+              suffix={t('units.yrs')}
               value={draft.age}
               onChangeText={(value) => set('age', value)}
               error={fieldErrors.age}
             />
             <NumberField
               className="flex-1"
-              label="Height"
-              suffix="cm"
+              label={t('profile.heightLabel')}
+              suffix={t('units.cm')}
               decimal
               value={draft.height_cm}
               onChangeText={(value) => set('height_cm', value)}
@@ -290,58 +296,56 @@ export default function ProfileScreen() {
           </View>
 
           <NumberField
-            label="Weight"
-            suffix="kg"
+            label={t('profile.weightLabel')}
+            suffix={t('units.kg')}
             decimal
             value={draft.weight_kg}
             onChangeText={(value) => set('weight_kg', value)}
             error={fieldErrors.weight_kg}
-            hint="Protein and fat targets scale off this."
+            hint={t('profile.weightHint')}
           />
         </View>
       </Card>
 
-      <Card title="Activity level" subtitle="Multiplies your BMR to give TDEE.">
+      <Card title={t('profile.activityTitle')} subtitle={t('profile.activitySubtitle')}>
         <OptionList
           value={draft.activity_level}
           onChange={(value) => set('activity_level', value)}
           options={ACTIVITY_LEVELS.map((level) => ({
             value: level.value,
-            label: `${level.label}  x${level.multiplier}`,
-            hint: level.hint,
+            label: `${t(`activity.${level.value}.label`)}  x${level.multiplier}`,
+            hint: t(`activity.${level.value}.hint`),
           }))}
         />
       </Card>
 
-      <Card title="Goal">
+      <Card title={t('profile.goalTitle')}>
         <View className="gap-4">
           <Segmented
             value={draft.goal}
             onChange={onGoalChange}
-            options={GOALS.map((goal) => ({ value: goal.value, label: goal.label }))}
+            options={GOALS.map((goal) => ({ value: goal.value, label: t(`goals.${goal.value}.label`) }))}
           />
 
           {draft.goal === 'maintain' ? (
-            <Text className="text-sm text-neutral-500">Your target is your TDEE, unchanged.</Text>
+            <Text className="text-sm text-neutral-500">{t('profile.maintainNote')}</Text>
           ) : (
             <>
               <NumberField
-                label={`Daily ${goalMeta.verb.toLowerCase()}`}
-                suffix="kcal"
+                label={t('profile.dailyRate', { verb: goalVerb.toLowerCase() })}
+                suffix={t('units.kcal')}
                 value={draft.rate_kcal_per_day}
                 onChangeText={(value) => set('rate_kcal_per_day', value)}
                 hint={
                   draft.goal === 'cut'
-                    ? `Up to ${fmtInt(rateCap)} kcal - your target never drops below your BMR.`
-                    : `Up to ${fmtInt(rateCap)} kcal.`
+                    ? t('profile.rateHintCut', { cap: fmtInt(rateCap) })
+                    : t('profile.rateHintOther', { cap: fmtInt(rateCap) })
                 }
                 error={
                   rateIsCapped
-                    ? `Capped at ${fmtInt(rateCap)} kcal. ${
-                        draft.goal === 'cut'
-                          ? 'A bigger deficit would push your target below your BMR.'
-                          : 'Larger surpluses mostly add fat, not muscle.'
-                      }`
+                    ? draft.goal === 'cut'
+                      ? t('profile.rateCappedCut', { cap: fmtInt(rateCap) })
+                      : t('profile.rateCappedBulk', { cap: fmtInt(rateCap) })
                     : undefined
                 }
               />
@@ -361,52 +365,58 @@ export default function ProfileScreen() {
         </View>
       </Card>
 
-      <Card
-        title="Macro preferences"
-        subtitle="Carbs fill whatever calories protein and fat leave behind."
-      >
+      <Card title={t('profile.macrosTitle')} subtitle={t('profile.macrosSubtitle')}>
         <View className="gap-4">
           <NumberField
-            label="Protein"
-            suffix="g / kg"
+            label={t('profile.proteinLabel')}
+            suffix={t('units.gPerKg')}
             decimal
             value={draft.protein_g_per_kg}
             onChangeText={(value) => set('protein_g_per_kg', value)}
             error={fieldErrors.protein_g_per_kg}
             hint={
               targets
-                ? `${Math.round(targets.protein_g_target)} g/day - default 2.0 g/kg`
-                : 'Default 2.0 g/kg'
+                ? t('profile.proteinHintWithTarget', { grams: Math.round(targets.protein_g_target) })
+                : t('profile.proteinHintDefault')
             }
           />
           <NumberField
-            label="Fat"
-            suffix="g / kg"
+            label={t('profile.fatLabel')}
+            suffix={t('units.gPerKg')}
             decimal
             value={draft.fat_g_per_kg}
             onChangeText={(value) => set('fat_g_per_kg', value)}
             error={fieldErrors.fat_g_per_kg}
             hint={
               targets
-                ? `${Math.round(targets.fat_g_target)} g/day - floored at 20% of calories`
-                : 'Default 0.8 g/kg, floored at 20% of calories'
+                ? t('profile.fatHintWithTarget', { grams: Math.round(targets.fat_g_target) })
+                : t('profile.fatHintDefault')
             }
           />
+        </View>
+      </Card>
+
+      {/* Its own section (not folded into another card) so more settings can
+          land here later without restructuring the screen. */}
+      <Card title={t('settings.title')}>
+        <View>
+          <Text className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-500">
+            {t('settings.languageLabel')}
+          </Text>
+          <Segmented value={language} onChange={(value) => void setLanguage(value)} options={LANGUAGE_OPTIONS} />
         </View>
       </Card>
 
       {saveError ? <Text className="text-sm text-red-400">{saveError}</Text> : null}
 
       <Button
-        label={profile ? (dirty ? 'Save changes' : 'Saved') : 'Save profile'}
+        label={profile ? (dirty ? t('common.saveChanges') : t('common.saved')) : t('profile.saveProfile')}
         onPress={onSave}
         loading={saving}
         disabled={!isValid || (Boolean(profile) && !dirty)}
       />
       {profile && dirty ? (
-        <Text className="-mt-2 text-center text-xs text-amber-400">
-          Unsaved changes - your log still uses the saved targets.
-        </Text>
+        <Text className="-mt-2 text-center text-xs text-amber-400">{t('profile.unsavedNote')}</Text>
       ) : null}
     </Screen>
   );
@@ -432,6 +442,7 @@ function PresetChip({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Text
       onPress={disabled ? undefined : onPress}
@@ -443,7 +454,7 @@ function PresetChip({
             : 'border-ink-line text-neutral-400'
       }`}
     >
-      {kcal} kcal
+      {t('common.kcalValue', { value: kcal })}
     </Text>
   );
 }

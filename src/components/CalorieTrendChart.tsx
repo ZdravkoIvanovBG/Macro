@@ -1,4 +1,5 @@
 import { View, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { theme } from '../lib/theme';
 import { fmtInt } from '../lib/format';
@@ -22,6 +23,7 @@ export default function CalorieTrendChart({
   calorieTarget,
   height = 120,
 }: CalorieTrendChartProps) {
+  const { t } = useTranslation();
   const values = points.map((p) => p.summary?.calories ?? 0);
   const peak = Math.max(...values, calorieTarget ?? 0, 1);
   // Headroom so a record day doesn't touch the top edge.
@@ -52,7 +54,11 @@ export default function CalorieTrendChart({
             <View
               key={point.date}
               className="flex-1 justify-end"
-              accessibilityLabel={`${point.date}: ${logged ? `${Math.round(calories)} kcal` : 'nothing logged'}`}
+              accessibilityLabel={
+                logged
+                  ? t('history.chartBarLogged', { date: point.date, calories: Math.round(calories) })
+                  : t('history.chartBarEmpty', { date: point.date })
+              }
             >
               <View
                 className="w-full rounded-sm"
@@ -87,7 +93,7 @@ export default function CalorieTrendChart({
         <View className="mt-2 flex-row items-center gap-1.5">
           <View className="h-px w-4 border-t border-dashed border-neutral-600" />
           <Text className="text-[11px] text-neutral-500">
-            Target {fmtInt(calorieTarget)} kcal
+            {t('history.chartTarget', { value: fmtInt(calorieTarget) })}
           </Text>
         </View>
       ) : null}

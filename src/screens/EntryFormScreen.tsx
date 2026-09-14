@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 
 import Screen from '../components/Screen';
 import Card from '../components/Card';
@@ -19,14 +20,9 @@ import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EntryForm'>;
 
-const UNITS = [
-  { value: 'g', label: 'g' },
-  { value: 'ml', label: 'ml' },
-  { value: 'serving', label: 'serving' },
-  { value: 'piece', label: 'piece' },
-] as const;
+const UNITS = ['g', 'ml', 'serving', 'piece'] as const;
 
-type Unit = (typeof UNITS)[number]['value'];
+type Unit = (typeof UNITS)[number];
 
 interface FormState {
   name: string;
@@ -84,6 +80,7 @@ function nutritionToForm(n: Nutrition): Pick<
 }
 
 export default function EntryFormScreen({ route, navigation }: Props) {
+  const { t } = useTranslation();
   const { date, entryId, prefill } = route.params;
   const isEdit = entryId !== undefined;
   const { addEntry, editEntry, removeEntry } = useLog();
@@ -102,8 +99,8 @@ export default function EntryFormScreen({ route, navigation }: Props) {
   const [submitted, setSubmitted] = useState(false);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: isEdit ? 'Edit entry' : 'Add food' });
-  }, [navigation, isEdit]);
+    navigation.setOptions({ title: isEdit ? t('entryForm.titleEdit') : t('entryForm.titleAdd') });
+  }, [navigation, isEdit, t]);
 
   // Seed the form: an existing entry in edit mode, otherwise the prefill.
   useEffect(() => {
@@ -115,7 +112,7 @@ export default function EntryFormScreen({ route, navigation }: Props) {
           const entry = await getEntry(entryId!);
           if (cancelled) return;
           if (!entry) {
-            Alert.alert('Entry not found', 'It may have been deleted already.');
+            Alert.alert(t('entryForm.notFoundTitle'), t('entryForm.notFoundMessage'));
             navigation.goBack();
             return;
           }
@@ -125,14 +122,14 @@ export default function EntryFormScreen({ route, navigation }: Props) {
             name: entry.name,
             brand: entry.brand ?? '',
             quantity: fmtDecimal(entry.quantity, 2),
-            unit: (UNITS.find((u) => u.value === entry.unit)?.value ?? 'g') as Unit,
+            unit: (UNITS.find((u) => u === entry.unit) ?? 'g') as Unit,
             ...nutritionToForm(entry),
           });
         } catch (err) {
           if (!cancelled) {
             Alert.alert(
-              'Could not open entry',
-              err instanceof Error ? err.message : 'Unknown error.'
+              t('entryForm.openFailedTitle'),
+              err instanceof Error ? err.message : t('common.unknownError')
             );
             navigation.goBack();
           }
@@ -153,7 +150,7 @@ export default function EntryFormScreen({ route, navigation }: Props) {
           name: prefill.name,
           brand: prefill.brand ?? '',
           quantity: fmtDecimal(quantity, 2),
-          unit: (UNITS.find((u) => u.value === prefill.unit)?.value ?? 'g') as Unit,
+          unit: (UNITS.find((u) => u === prefill.unit) ?? 'g') as Unit,
           ...(nutrition
             ? nutritionToForm(nutrition)
             : { calories: '', protein_g: '', carbs_g: '', fat_g: '', fiber_g: '' }),
@@ -168,24 +165,24 @@ export default function EntryFormScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isEdit, entryId, prefill, navigation]);
+  }, [isEdit, entryId, prefill, navigation, t]);
 
   const quantity = parseNumber(form.quantity);
   const grams = quantity !== null ? gramsFor(quantity, form.unit, servingSizeG) : null;
 
   const errors = useMemo(() => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (form.name.trim() === '') next.name = 'Give this entry a name.';
-    if (quantity === null || quantity <= 0) next.quantity = 'Enter a quantity above zero.';
+    if (form.name.trim() === '') next.name = t('entryForm.errors.name');
+    if (quantity === null || quantity <= 0) next.quantity = t('entryForm.errors.quantity');
     const calories = parseNumber(form.calories);
-    if (calories === null) next.calories = 'Required.';
-    else if (calories < 0) next.calories = 'Calories cannot be negative.';
+    if (calories === null) next.calories = t('common.required');
+    else if (calories < 0) next.calories = t('entryForm.errors.caloriesNegative');
     (['protein_g', 'carbs_g', 'fat_g', 'fiber_g'] as const).forEach((key) => {
       const value = parseNumber(form[key]);
-      if (value !== null && value < 0) next[key] = 'Cannot be negative.';
+      if (value !== null && value < 0) next[key] = t('common.cannotBeNegative');
     });
     return next;
-  }, [form, quantity]);
+  }, [form, quantity, t]);
 
   const isValid = Object.keys(errors).length === 0;
 
@@ -246,17 +243,20 @@ export default function EntryFormScreen({ route, navigation }: Props) {
       else await addEntry(entry);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save the entry.');
+      Alert.alert(
+        t('entryForm.saveFailedTitle'),
+        err instanceof Error ? err.message : t('entryForm.saveFailedDefault')
+      );
     } finally {
       setSaving(false);
     }
   }
 
   function onDelete() {
-    Alert.alert('Delete entry', `Remove "${form.name}" from your log?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('log.deleteTitle'), t('log.deleteMessage', { name: form.name }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -264,8 +264,8 @@ export default function EntryFormScreen({ route, navigation }: Props) {
             navigation.goBack();
           } catch (err) {
             Alert.alert(
-              'Delete failed',
-              err instanceof Error ? err.message : 'Could not delete the entry.'
+              t('log.deleteFailedTitle'),
+              err instanceof Error ? err.message : t('log.deleteFailedDefault')
             );
           }
         },
@@ -288,92 +288,89 @@ export default function EntryFormScreen({ route, navigation }: Props) {
   return (
     <Screen>
       <Text className="px-1 text-xs uppercase tracking-wide text-neutral-500">
-        Logging to {formatDayLabel(date)}
+        {t('entryForm.loggingTo', { date: formatDayLabel(date) })}
       </Text>
 
       {barcode ? (
         <View className="flex-row items-center gap-2 rounded-xl border border-ink-line bg-ink-soft px-3 py-2.5">
           <Ionicons name="barcode-outline" size={16} color={theme.textFaint} />
-          <Text className="text-xs text-neutral-400">Barcode {barcode}</Text>
+          <Text className="text-xs text-neutral-400">{t('entryForm.barcodeLabel', { code: barcode })}</Text>
         </View>
       ) : null}
 
-      <Card title="Food">
+      <Card title={t('entryForm.foodTitle')}>
         <View className="gap-4">
           <TextField
-            label="Name"
+            label={t('entryForm.nameLabel')}
             value={form.name}
             onChangeText={(value) => set('name', value)}
-            placeholder="e.g. Greek yoghurt 2%"
+            placeholder={t('entryForm.namePlaceholder')}
             error={show('name')}
             autoFocus={!isEdit && (!prefill || prefill.name.trim() === '')}
           />
           <TextField
-            label="Brand"
+            label={t('entryForm.brandLabel')}
             value={form.brand}
             onChangeText={(value) => set('brand', value)}
-            placeholder="Optional"
+            placeholder={t('common.optional')}
           />
         </View>
       </Card>
 
       <Card
-        title="Amount"
+        title={t('entryForm.amountTitle')}
         subtitle={
           per100
             ? linked
-              ? 'Nutrition rescales automatically from this product per 100 g.'
-              : 'Nutrition is manually overridden.'
+              ? t('entryForm.rescalesAuto')
+              : t('entryForm.manuallyOverridden')
             : undefined
         }
       >
         <View className="gap-4">
           <NumberField
-            label="Quantity"
+            label={t('entryForm.quantityLabel')}
             decimal
             value={form.quantity}
             onChangeText={onQuantityChange}
             error={show('quantity')}
             hint={
               grams !== null && form.unit !== 'g' && form.unit !== 'ml'
-                ? `About ${Math.round(grams)} g`
+                ? t('entryForm.aboutGrams', { grams: Math.round(grams) })
                 : undefined
             }
           />
           <View>
             <Text className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-500">
-              Unit
+              {t('entryForm.unitLabel')}
             </Text>
             <Segmented
               value={form.unit}
               onChange={onUnitChange}
-              options={UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
+              options={UNITS.map((unit) => ({ value: unit, label: t(`units.${unit}`) }))}
             />
             {per100 && grams === null ? (
-              <Text className="mt-1.5 text-xs text-amber-400">
-                This product has no serving weight, so nutrition can&apos;t be rescaled for this
-                unit. Enter the values by hand.
-              </Text>
+              <Text className="mt-1.5 text-xs text-amber-400">{t('entryForm.noServingWeight')}</Text>
             ) : null}
           </View>
         </View>
       </Card>
 
       <Card
-        title="Nutrition"
-        subtitle={`For ${form.quantity || '0'} ${form.unit}`}
+        title={t('entryForm.nutritionTitle')}
+        subtitle={t('entryForm.forQuantity', { quantity: form.quantity || '0', unit: t(`units.${form.unit}`) })}
         right={
           per100 && !linked ? (
             <Pressable onPress={relink} hitSlop={8} className="active:opacity-60">
-              <Text className="text-xs font-semibold text-accent">Recalculate</Text>
+              <Text className="text-xs font-semibold text-accent">{t('entryForm.recalculate')}</Text>
             </Pressable>
           ) : undefined
         }
       >
         <View className="gap-4">
           <NumberField
-            label="Calories"
-            suffix="kcal"
+            label={t('entryForm.caloriesLabel')}
+            suffix={t('units.kcal')}
             decimal
             value={form.calories}
             onChangeText={(value) => setNutritionField('calories', value)}
@@ -382,8 +379,8 @@ export default function EntryFormScreen({ route, navigation }: Props) {
           <View className="flex-row gap-3">
             <NumberField
               className="flex-1"
-              label="Protein"
-              suffix="g"
+              label={t('macro.protein')}
+              suffix={t('units.g')}
               decimal
               value={form.protein_g}
               onChangeText={(value) => setNutritionField('protein_g', value)}
@@ -391,8 +388,8 @@ export default function EntryFormScreen({ route, navigation }: Props) {
             />
             <NumberField
               className="flex-1"
-              label="Carbs"
-              suffix="g"
+              label={t('macro.carbs')}
+              suffix={t('units.g')}
               decimal
               value={form.carbs_g}
               onChangeText={(value) => setNutritionField('carbs_g', value)}
@@ -402,8 +399,8 @@ export default function EntryFormScreen({ route, navigation }: Props) {
           <View className="flex-row gap-3">
             <NumberField
               className="flex-1"
-              label="Fat"
-              suffix="g"
+              label={t('macro.fat')}
+              suffix={t('units.g')}
               decimal
               value={form.fat_g}
               onChangeText={(value) => setNutritionField('fat_g', value)}
@@ -411,10 +408,10 @@ export default function EntryFormScreen({ route, navigation }: Props) {
             />
             <NumberField
               className="flex-1"
-              label="Fibre"
-              suffix="g"
+              label={t('entryForm.fibreLabel')}
+              suffix={t('units.g')}
               decimal
-              placeholder="Optional"
+              placeholder={t('common.optional')}
               value={form.fiber_g}
               onChangeText={(value) => setNutritionField('fiber_g', value)}
               error={show('fiber_g')}
@@ -423,23 +420,25 @@ export default function EntryFormScreen({ route, navigation }: Props) {
 
           {per100 ? (
             <Text className="text-xs text-neutral-500">
-              Per 100 g: {fmtInt(per100.calories)} kcal - {Math.round(per100.protein_g)}P -{' '}
-              {Math.round(per100.carbs_g)}C - {Math.round(per100.fat_g)}F
+              {t('entryForm.per100Summary', {
+                calories: fmtInt(per100.calories),
+                protein: Math.round(per100.protein_g),
+                carbs: Math.round(per100.carbs_g),
+                fat: Math.round(per100.fat_g),
+              })}
             </Text>
           ) : null}
         </View>
       </Card>
 
       <Button
-        label={isEdit ? 'Save changes' : 'Add to log'}
+        label={isEdit ? t('common.saveChanges') : t('entryForm.addToLog')}
         onPress={onSave}
         loading={saving}
         disabled={submitted && !isValid}
       />
 
-      {isEdit ? (
-        <Button label="Delete entry" onPress={onDelete} variant="danger" />
-      ) : null}
+      {isEdit ? <Button label={t('entryForm.deleteEntry')} onPress={onDelete} variant="danger" /> : null}
     </Screen>
   );
 }

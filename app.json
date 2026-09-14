@@ -23,7 +23,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,7 +37,10 @@
         {
           "cameraPermission": "Micro uses the camera to scan food barcodes so it can look up their nutrition information."
         }
-      ]
+      ],
+      "expo-localization",
+      "expo-status-bar",
+      "expo-font"
     ]
   }
 }

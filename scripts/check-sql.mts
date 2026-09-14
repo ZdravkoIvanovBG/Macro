@@ -12,10 +12,16 @@ import {
   SELECT_DAY_TOTALS,
   SELECT_ENTRIES_FOR_DATE,
   SELECT_ENTRY_BY_ID,
+  SELECT_INGREDIENT_NAME_TRANSLATION,
+  SELECT_INGREDIENT_TRANSLATION,
   SELECT_PROFILE,
   SELECT_RECENT_FOODS,
+  SELECT_SETTING,
   UPDATE_ENTRY,
+  UPSERT_INGREDIENT_NAME_TRANSLATION,
+  UPSERT_INGREDIENT_TRANSLATION,
   UPSERT_PROFILE,
+  UPSERT_SETTING,
   insertEntryParams,
   updateEntryParams,
   upsertProfileParams,
@@ -41,7 +47,7 @@ for (const migration of MIGRATIONS) {
   version += 1;
   db.exec(`PRAGMA user_version = ${version}`);
 }
-eq('user_version after migrating', db.prepare('PRAGMA user_version').get()!.user_version, 1);
+eq('user_version after migrating', db.prepare('PRAGMA user_version').get()!.user_version, 4);
 
 // Re-running is a no-op (IF NOT EXISTS), which is what a reopened app does.
 for (const migration of MIGRATIONS) db.exec(migration);
@@ -53,6 +59,13 @@ const tables = db
   .map((r: any) => r.name);
 check('profile table exists', tables.includes('profile'), tables.join(', '));
 check('food_entry table exists', tables.includes('food_entry'), tables.join(', '));
+check('settings table exists', tables.includes('settings'), tables.join(', '));
+check('ingredient_translation table exists', tables.includes('ingredient_translation'), tables.join(', '));
+check(
+  'ingredient_name_translation table exists',
+  tables.includes('ingredient_name_translation'),
+  tables.join(', ')
+);
 
 const indexes = db
   .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'food_entry'")
@@ -204,9 +217,84 @@ check('recent foods newest first', recents[0].logged_at >= recents[recents.lengt
 db.prepare(DELETE_ENTRY).run(firstId);
 eq('entry deleted', db.prepare(SELECT_ENTRY_BY_ID).get(firstId), undefined);
 
+// --- settings ----------------------------------------------------------------
+db.prepare(UPSERT_SETTING).run('language', 'en');
+eq('setting inserted', (db.prepare(SELECT_SETTING).get('language') as any)?.value, 'en');
+db.prepare(UPSERT_SETTING).run('language', 'bg');
+eq('setting row count stays 1', db.prepare('SELECT COUNT(*) AS n FROM settings').get()!.n, 1);
+eq('setting updated in place', (db.prepare(SELECT_SETTING).get('language') as any)?.value, 'bg');
+eq('missing setting reads as undefined', db.prepare(SELECT_SETTING).get('nope'), undefined);
+
+// --- ingredient translation cache --------------------------------------------
+db.prepare(UPSERT_INGREDIENT_TRANSLATION).run('3017620422003', 'bg', 'Захар, палмово масло', '2026-09-07T10:00:00Z');
+eq(
+  'translation cached',
+  (db.prepare(SELECT_INGREDIENT_TRANSLATION).get('3017620422003', 'bg') as any)?.translated_text,
+  'Захар, палмово масло'
+);
+eq(
+  'translation cache is keyed by language too',
+  db.prepare(SELECT_INGREDIENT_TRANSLATION).get('3017620422003', 'en'),
+  undefined
+);
+db.prepare(UPSERT_INGREDIENT_TRANSLATION).run('3017620422003', 'bg', 'Захар, палмово масло, лешници', '2026-09-08T10:00:00Z');
+eq(
+  'translation row count stays 1 per barcode+lang',
+  db.prepare("SELECT COUNT(*) AS n FROM ingredient_translation WHERE barcode = '3017620422003' AND lang = 'bg'").get()!.n,
+  1
+);
+eq(
+  're-upserting a translation updates it in place',
+  (db.prepare(SELECT_INGREDIENT_TRANSLATION).get('3017620422003', 'bg') as any)?.translated_text,
+  'Захар, палмово масло, лешници'
+);
+
+// --- ingredient name translation cache (keyed by source text, not barcode) --
+db.prepare(UPSERT_INGREDIENT_NAME_TRANSLATION).run('Skimmed milk powder', 'bg', 'Обезмаслено мляко на прах', '2026-09-07T10:00:00Z');
+eq(
+  'name translation cached',
+  (db.prepare(SELECT_INGREDIENT_NAME_TRANSLATION).get('Skimmed milk powder', 'bg') as any)?.translated_text,
+  'Обезмаслено мляко на прах'
+);
+eq(
+  'name translation cache is keyed by language too',
+  db.prepare(SELECT_INGREDIENT_NAME_TRANSLATION).get('Skimmed milk powder', 'en'),
+  undefined
+);
+db.prepare(UPSERT_INGREDIENT_NAME_TRANSLATION).run('Skimmed milk powder', 'bg', 'Обезмаслено сухо мляко', '2026-09-08T10:00:00Z');
+eq(
+  'name translation row count stays 1 per source+lang',
+  db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM ingredient_name_translation WHERE source_text = 'Skimmed milk powder' AND lang = 'bg'"
+    )
+    .get()!.n,
+  1
+);
+eq(
+  're-upserting a name translation updates it in place',
+  (db.prepare(SELECT_INGREDIENT_NAME_TRANSLATION).get('Skimmed milk powder', 'bg') as any)?.translated_text,
+  'Обезмаслено сухо мляко'
+);
+
 db.exec(DELETE_ALL);
 eq('reset clears entries', db.prepare('SELECT COUNT(*) AS n FROM food_entry').get()!.n, 0);
 eq('reset clears profile', db.prepare('SELECT COUNT(*) AS n FROM profile').get()!.n, 0);
+eq(
+  'reset does not clear settings',
+  db.prepare('SELECT COUNT(*) AS n FROM settings').get()!.n,
+  1
+);
+eq(
+  'reset does not clear cached translations',
+  db.prepare('SELECT COUNT(*) AS n FROM ingredient_translation').get()!.n,
+  1
+);
+eq(
+  'reset does not clear cached name translations',
+  db.prepare('SELECT COUNT(*) AS n FROM ingredient_name_translation').get()!.n,
+  1
+);
 
 console.log(failures === 0 ? '\nALL SQL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

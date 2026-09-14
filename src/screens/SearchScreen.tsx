@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 
 import Screen from '../components/Screen';
 import EmptyState from '../components/EmptyState';
@@ -28,6 +29,7 @@ const DEBOUNCE_MS = 450;
 const MIN_QUERY_LENGTH = 2;
 
 export default function SearchScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { date, version } = useLog();
 
@@ -137,7 +139,7 @@ export default function SearchScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search Open Food Facts"
+          placeholder={t('search.placeholder')}
           placeholderTextColor={theme.textFaint}
           selectionColor={theme.accent}
           autoCorrect={false}
@@ -147,7 +149,7 @@ export default function SearchScreen() {
         />
         {loading ? <ActivityIndicator size="small" color={theme.textFaint} /> : null}
         {query !== '' && !loading ? (
-          <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+          <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel={t('search.clearLabel')}>
             <Ionicons name="close-circle" size={18} color={theme.textFaint} />
           </Pressable>
         ) : null}
@@ -155,14 +157,15 @@ export default function SearchScreen() {
 
       {results && results.length > 0 ? (
         <Text className="px-1 text-xs text-neutral-500">
-          {results.length} shown{total > results.length ? ` of ${fmtInt(total)} matches` : ''} -
-          products sold in Bulgaria first
+          {total > results.length
+            ? t('search.resultsCountTotal', { shown: results.length, total: fmtInt(total) })
+            : t('search.resultsCountShort', { shown: results.length })}
         </Text>
       ) : null}
 
       {!searching && recents.length > 0 ? (
         <Text className="px-1 text-xs uppercase tracking-wide text-neutral-500">
-          Recently logged
+          {t('search.recentlyLogged')}
         </Text>
       ) : null}
     </View>
@@ -173,9 +176,9 @@ export default function SearchScreen() {
       return (
         <EmptyState
           icon="cloud-offline-outline"
-          title="Search failed"
+          title={t('search.failedTitle')}
           message={error}
-          actionLabel="Try again"
+          actionLabel={t('common.tryAgain')}
           onAction={() => setAttempt((a) => a + 1)}
         />
       );
@@ -184,7 +187,7 @@ export default function SearchScreen() {
       return (
         <View className="items-center py-12">
           <ActivityIndicator color={theme.accent} />
-          <Text className="mt-3 text-sm text-neutral-500">Searching Open Food Facts…</Text>
+          <Text className="mt-3 text-sm text-neutral-500">{t('search.searching')}</Text>
         </View>
       );
     }
@@ -192,20 +195,16 @@ export default function SearchScreen() {
       return (
         <EmptyState
           icon="file-tray-outline"
-          title="No matches"
-          message={`Open Food Facts has nothing for "${trimmed}". Try a shorter or more common name, scan the barcode, or add it manually.`}
-          actionLabel="Add manually"
+          title={t('search.noMatchesTitle')}
+          message={t('search.noMatchesMessage', { query: trimmed })}
+          actionLabel={t('search.addManually')}
           onAction={() => navigation.navigate('EntryForm', { date })}
         />
       );
     }
     if (!searching && recents.length === 0) {
       return (
-        <EmptyState
-          icon="search-outline"
-          title="Search for a food"
-          message="Type at least two characters. Results come from the Open Food Facts database, so this is the one part of the app that needs a connection."
-        />
+        <EmptyState icon="search-outline" title={t('search.emptyTitle')} message={t('search.emptyMessage')} />
       );
     }
     return null;
@@ -244,6 +243,7 @@ export default function SearchScreen() {
 }
 
 function ProductRow({ product, onPress }: { product: OffProduct; onPress: () => void }) {
+  const { t } = useTranslation();
   const per100 = product.per100;
   return (
     <Pressable
@@ -281,14 +281,14 @@ function ProductRow({ product, onPress }: { product: OffProduct; onPress: () => 
         ) : null}
         {per100 ? (
           <Text className="mt-1 text-[11px] text-neutral-400">
-            {fmtInt(per100.calories)} kcal · {Math.round(per100.protein_g)}P{' '}
-            {Math.round(per100.carbs_g)}C {Math.round(per100.fat_g)}F
-            <Text className="text-neutral-600"> / 100 g</Text>
+            {fmtInt(per100.calories)} {t('units.kcal')} · {Math.round(per100.protein_g)}
+            {t('units.proteinShort')} {Math.round(per100.carbs_g)}
+            {t('units.carbsShort')} {Math.round(per100.fat_g)}
+            {t('units.fatShort')}
+            <Text className="text-neutral-600"> {t('units.per100g')}</Text>
           </Text>
         ) : (
-          <Text className="mt-1 text-[11px] text-amber-400">
-            No nutrition data — you&apos;ll need to fill it in
-          </Text>
+          <Text className="mt-1 text-[11px] text-amber-400">{t('search.noNutritionData')}</Text>
         )}
       </View>
 
@@ -298,6 +298,7 @@ function ProductRow({ product, onPress }: { product: OffProduct; onPress: () => 
 }
 
 function RecentRow({ entry, onPress }: { entry: FoodEntry; onPress: () => void }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
@@ -313,7 +314,11 @@ function RecentRow({ entry, onPress }: { entry: FoodEntry; onPress: () => void }
         </Text>
         <Text className="mt-0.5 text-xs text-neutral-500" numberOfLines={1}>
           {entry.brand ? `${entry.brand} - ` : ''}
-          {fmtInt(entry.calories)} kcal for {entry.quantity} {entry.unit}
+          {t('search.recentSubtitle', {
+            calories: fmtInt(entry.calories),
+            quantity: entry.quantity,
+            unit: entry.unit,
+          })}
         </Text>
       </View>
       <Ionicons name="add-circle-outline" size={20} color={theme.accent} />

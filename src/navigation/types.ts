@@ -5,7 +5,7 @@ import type { EntryPrefill } from '../lib/types';
 export type RootTabParamList = {
   Log: undefined;
   Search: undefined;
-  Scan: undefined;
+  Ingredients: undefined;
   History: undefined;
   Profile: undefined;
 };
@@ -21,6 +21,10 @@ export type RootStackParamList = {
     entryId?: number;
     prefill?: EntryPrefill;
   };
+  /** Calorie/macro barcode scanner, pushed from the Today screen's Scan tile. */
+  Scan: undefined;
+  /** Read-only ingredient breakdown for a scanned barcode — never logs anything. */
+  IngredientsReport: { barcode: string };
 };
 
 declare global {
