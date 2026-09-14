@@ -13,6 +13,39 @@ npm start          # then scan the QR code with Expo Go
 
 The barcode scanner needs a real device — the camera is not available in a simulator.
 
+## Android APK releases
+
+Every GitHub tag named `apk-v*` (for example, `apk-v1.0.1`) runs the **Android APK release**
+workflow. GitHub generates the Android project, builds a signed installable APK, and attaches it
+to the matching [GitHub Release](https://github.com/ZdravkoIvanovBG/Macro/releases). It does not
+use EAS, an Expo account, or an Expo access token.
+
+One-time setup:
+
+1. Generate a release keystore and keep a safe backup outside the repository:
+
+   ```powershell
+   keytool -genkeypair -v -keystore micro-release.jks -storetype PKCS12 -alias micro-release -keyalg RSA -keysize 2048 -validity 10000
+   ```
+
+2. In the repository's **Settings → Secrets and variables → Actions**, create these secrets:
+   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and
+   `ANDROID_KEY_PASSWORD`. To copy the first value in PowerShell:
+
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes(".\micro-release.jks")) | Set-Clipboard
+   ```
+
+   Use `micro-release` for `ANDROID_KEY_ALIAS` if you used the command above. Use the passwords
+   you chose for the remaining two secrets.
+3. Push a tag such as `git tag apk-v1.0.1` and `git push origin apk-v1.0.1`, or start the workflow
+   manually from GitHub Actions and enter a new `apk-v...` release tag.
+
+The installed app is a standalone release build; it does not need Expo Go or a running development
+server. Installing a newer APK over it preserves its local SQLite data as long as the Android
+package ID remains `com.zdravko.micro` and the same release keystore is used. The workflow assigns
+each run an increasing Android version code, which Android requires for an update install.
+
 ## What it does
 
 | Tab | |

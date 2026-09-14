@@ -4,7 +4,7 @@
     "appVersionSource": "local"
   },
   "build": {
-    "internal": {
+    "ios-internal": {
       "distribution": "internal",
       "developmentClient": false,
       "ios": {
