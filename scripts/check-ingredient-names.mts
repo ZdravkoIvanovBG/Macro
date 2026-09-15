@@ -191,7 +191,12 @@ const cappyBgRows = flatten(localizeTree(cappyTree, cappyCtx('bg'), 'bg'));
 const cappyEnRows = flatten(localizeTree(cappyTree, cappyCtx('en'), 'en'));
 const nameOf = (rows: typeof cappyBgRows, text: string) => rows.find(({ node }) => node.text === text)?.node.displayName;
 
-check('Cappy fixture really is the mis-parsed one', cappyTree.length > 20 && cappyTree[0].id === 'fr:D 1Le BG');
+check(
+  'Cappy fixture really is the mis-parsed one — its "D 1Le BG" wrapper row is sanitized away, its child promoted',
+  cappyTree.length > 20 &&
+    (cappy.product['ingredients'] as Array<{ id: string }>)[0].id === 'fr:D 1Le BG' &&
+    cappyTree[0].id === 'fr:Негазирана напитка със сок от портокал от концентрат'
+);
 check(
   'Cappy bg: no Bulgarian label text is replaced by "unknown" — top level or nested',
   cappyBgRows.filter(({ node }) => isBulgarianText(node.text)).every(({ node }) => node.displayName !== null),
@@ -252,6 +257,7 @@ const unrecognizedEnglish: IngredientNode = {
   id: 'en:some-unrecognized-tag',
   text: 'glucose-fructose syrup',
   isInTaxonomy: false,
+  hasFoodProperties: false,
   percent: null,
   percentEstimate: 16,
   percentMin: null,
@@ -305,6 +311,7 @@ const baobab: IngredientNode = {
   id: 'en:baobab-fruit-pulp',
   text: 'pulpe de fruit de baobab',
   isInTaxonomy: true,
+  hasFoodProperties: false,
   percent: null,
   percentEstimate: 1,
   percentMin: null,
@@ -353,6 +360,44 @@ check(
   'an unnamed nested ingredient stays under its parent',
   parentWithUnnamedChild[0].displayName === 'E322' && parentWithUnnamedChild[0].children[0]?.nameSource === 'unnamed'
 );
+
+// --- localization after sanitization -----------------------------------------------
+// The tree is sanitized in toIngredientsProduct, before any naming happens, so
+// removed rows can't come back through a translation and promoted children
+// are named like any other row.
+const noiseSample = JSON.parse(readFileSync(new URL('./fixtures/off-noise-sample.json', import.meta.url), 'utf8')) as {
+  product: Record<string, unknown>;
+};
+const noiseTaxonomyPayload = {
+  'en:sugar': { name: { en: 'sugar', bg: 'захар' } },
+  'en:skimmed-milk-powder': { name: { en: 'skimmed milk powder', bg: 'обезмаслено сухо мляко' } },
+  'en:fat-reduced-cocoa': { name: { en: 'fat reduced cocoa', bg: 'какао с намалено съдържание на мазнини' } },
+  'en:e322': { name: { en: 'E322', bg: 'E322' } },
+  'en:soya-lecithin': { name: { en: 'soya lecithin', bg: 'соев лецитин' } },
+  'en:hazelnut': { name: { en: 'hazelnut', bg: 'лешник' } },
+  'en:palm-oil': { name: { en: 'palm oil', bg: 'палмово масло' } },
+};
+const noiseRemovedTexts = [
+  'Used under licence by Froneri', 'КОНТАКТИ', 'Ломско шосе', 'Www за информация', 'Nestle Good Food',
+  'Trademarks of Société', 'Switzerland 3A CONTACTS', 'quot',
+];
+for (const lang of ['en', 'bg'] as const) {
+  const product = toIngredientsProduct(noiseSample.product, lang)!;
+  const rows = flatten(localizeTree(product.ingredientTree, { taxonomy: readTaxonomyNames(noiseTaxonomyPayload, lang) }, lang));
+  check(
+    `noise sample ${lang}: no removed row is named or shown`,
+    rows.every(({ node }) => !noiseRemovedTexts.includes(node.text)),
+    rows.map(({ node }) => node.text).join(', ')
+  );
+  check(
+    `noise sample ${lang}: promoted and nested ingredients are named in the app language, in OFF order`,
+    rowsText(rows) ===
+      (lang === 'en'
+        ? 'Sugar|Skimmed milk powder|Fat reduced cocoa|E322|  Soya lecithin|Hazelnut|Kombucha|Palm oil'
+        : 'Захар|Обезмаслено сухо мляко|Какао с намалено съдържание на мазнини|E322|  Соев лецитин|Лешник|<unknown>|Палмово масло'),
+    rowsText(rows)
+  );
+}
 
 console.log(failures === 0 ? '\nALL INGREDIENT NAME CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

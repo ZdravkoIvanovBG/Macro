@@ -1,0 +1,42 @@
+{
+  "_comment": "Synthetic product in Open Food Facts' v2 response shape. Its structured ingredients mix real rows with non-ingredient rows of the kind seen in OFF data (addresses, contact lines, trademark notices, websites, HTML entities), including garbage parents wrapping real ingredients.",
+  "status": 1,
+  "product": {
+    "code": "0000000000017",
+    "product_name": "Ice cream sample",
+    "brands": "Nestlé, Froneri",
+    "ingredients_text_en": "sugar, skimmed milk powder 12.5%, fat-reduced cocoa, emulsifier (soya lecithin), hazelnuts 13%, kombucha, palm oil",
+    "ingredients": [
+      { "id": "en:sugar", "text": "sugar", "is_in_taxonomy": 1, "percent_estimate": 40, "percent_min": 12.5, "percent_max": 60, "ciqual_food_code": "31016", "vegan": "yes" },
+      {
+        "id": "en:Used under licence by Froneri",
+        "text": "Used under licence by Froneri",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 20,
+        "ingredients": [
+          { "id": "en:skimmed-milk-powder", "text": "skimmed milk powder", "is_in_taxonomy": 1, "percent": 12.5, "percent_estimate": 12.5 },
+          { "id": "en:fat-reduced-cocoa", "text": "fat-reduced cocoa", "is_in_taxonomy": 1, "percent_estimate": 7.5, "percent_min": 0, "percent_max": 12.5 }
+        ]
+      },
+      {
+        "id": "en:e322",
+        "text": "emulsifier",
+        "is_in_taxonomy": 1,
+        "percent_estimate": 5,
+        "ingredients": [
+          { "id": "en:soya-lecithin", "text": "soya lecithin", "is_in_taxonomy": 1, "percent_estimate": 4.9 },
+          { "id": "bg:КОНТАКТИ", "text": "КОНТАКТИ", "is_in_taxonomy": 0, "percent_estimate": 0.1 }
+        ]
+      },
+      { "id": "en:hazelnut", "text": "hazelnuts", "is_in_taxonomy": 1, "percent": 13, "percent_estimate": 13 },
+      { "id": "bg:Ломско шосе", "text": "Ломско шосе", "is_in_taxonomy": 0, "percent_estimate": 3 },
+      { "id": "bg:Www за информация", "text": "Www за информация", "is_in_taxonomy": 0, "percent_estimate": 2.5 },
+      { "id": "en:Nestle Good Food", "text": "Nestle Good Food", "is_in_taxonomy": 0, "percent_estimate": 2 },
+      { "id": "en:Trademarks of Société", "text": "Trademarks of Société", "is_in_taxonomy": 0, "percent_estimate": 1.5 },
+      { "id": "en:Switzerland 3A CONTACTS", "text": "Switzerland 3A CONTACTS", "is_in_taxonomy": 0, "percent_estimate": 1.2 },
+      { "id": "en:quot", "text": "quot", "is_in_taxonomy": 0, "percent_estimate": 1.1 },
+      { "id": "en:kombucha", "text": "kombucha", "is_in_taxonomy": 0, "percent_estimate": 1 },
+      { "id": "en:palm-oil", "text": "palm oil", "is_in_taxonomy": 1, "percent_estimate": 2, "percent_min": 0, "percent_max": 5, "from_palm_oil": "yes" }
+    ]
+  }
+}

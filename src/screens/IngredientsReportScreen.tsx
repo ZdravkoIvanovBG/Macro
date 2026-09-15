@@ -8,6 +8,7 @@ import Screen from '../components/Screen';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
+import IngredientSanitizerDebug from '../components/IngredientSanitizerDebug';
 import { useSettings } from '../state/SettingsContext';
 import { theme } from '../lib/theme';
 import { fmtDecimal } from '../lib/format';
@@ -50,9 +51,20 @@ type Report = { product: OffIngredientsProduct; tree: LocalizedIngredientNode[] 
 async function loadReport(barcode: string, language: AppLanguage): Promise<Report | null> {
   const product = await fetchIngredientsByBarcode(barcode, language);
   if (!product) return null;
+  if (__DEV__) logSanitizerDecisions(barcode, product);
   const tree = await localizeIngredientTree(product.ingredientTree, language);
   if (tree.length > 0) return { product, tree };
   return { product: await withTranslationFallback(product, language), tree };
+}
+
+/** Dev-only: prints the rows the sanitizer didn't treat as plainly valid, to the Metro log. */
+function logSanitizerDecisions(barcode: string, product: OffIngredientsProduct) {
+  const flagged = product.ingredientDecisions.filter((d) => d.classification !== 'VALID');
+  if (flagged.length === 0) return;
+  console.log(
+    `[ingredient-sanitizer] ${barcode}: ${flagged.length} of ${product.ingredientDecisions.length} rows not VALID\n` +
+      flagged.map((d) => `  ${d.path} ${d.classification} ${d.rule} ${d.action} ${JSON.stringify(d.text)} — ${d.reason}`).join('\n')
+  );
 }
 
 export default function IngredientsReportScreen({ route, navigation }: Props) {
@@ -219,6 +231,10 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
       ) : null}
 
       <Text className="px-1 text-xs leading-4 text-neutral-500">{t('ingredients.disclaimer')}</Text>
+
+      {__DEV__ && product.ingredientDecisions.length > 0 ? (
+        <IngredientSanitizerDebug decisions={product.ingredientDecisions} />
+      ) : null}
 
       <Button label={t('ingredients.scanAnother')} variant="secondary" onPress={() => navigation.goBack()} />
     </Screen>

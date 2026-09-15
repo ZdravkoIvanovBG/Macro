@@ -509,6 +509,24 @@ function lookupOne(value: string): GlossaryLookupResult | null {
   return GLOSSARY[normalizeName(source)] ?? null;
 }
 
+const WHOLE_E_NUMBER = /^e[\s-]?\d{3,4}[\s-]?[a-z]*$/i;
+
+/**
+ * Whether the glossary knows this ingredient by its whole name (or as a bare
+ * E-number). Stricter than `lookupIngredientInfo`, whose E-number pattern
+ * matches anywhere in a longer string — used as a "this is a real ingredient"
+ * signal by the ingredient sanitizer, so "Tel. E 1234 …" must not count.
+ */
+export function isKnownIngredient(ingredient: { id: string | null; text: string }): boolean {
+  const known = (value: string) => {
+    const source = value.replace(/^[a-z]{2}:/i, '').trim();
+    if (source === '') return false;
+    if (WHOLE_E_NUMBER.test(source)) return lookupOne(source) !== null;
+    return GLOSSARY[normalizeName(source)] !== undefined;
+  };
+  return (ingredient.id !== null && known(ingredient.id)) || known(ingredient.text);
+}
+
 /**
  * Looks up a plain-language description and risk tier for an ingredient,
  * trying its OFF taxonomy id first (e.g. "en:skimmed-milk", "en:e330"), then

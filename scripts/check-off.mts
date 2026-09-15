@@ -450,6 +450,7 @@ const bareNode: IngredientNode = {
   id: 'en:salt',
   text: 'salt',
   isInTaxonomy: true,
+  hasFoodProperties: false,
   percent: null,
   percentEstimate: null,
   percentMin: 0,
@@ -461,8 +462,20 @@ check('an upper bound of 100 says nothing', formatIngredientPercent({ ...bareNod
 check('an exact percent wins over an estimate and a bound', formatIngredientPercent({ ...bareNode, percent: 1.5, percentEstimate: 1 }).kind === 'exact');
 check('no structured array -> an empty tree', toIngredientsProduct({ code: '1', product_name: 'X' }, 'en')!.ingredientTree.length === 0);
 check(
-  'non-ingredient boilerplate is dropped from the tree too',
-  readIngredientTree([{ id: 'en:sugar', text: 'sugar' }, { text: 'best before see lid' }]).length === 1
+  'the raw tree reader keeps every row — filtering is the sanitizer\'s job',
+  readIngredientTree([{ id: 'en:sugar', text: 'sugar' }, { text: 'best before see lid' }]).length === 2
+);
+check(
+  'non-ingredient boilerplate is dropped from the product\'s tree',
+  toIngredientsProduct(
+    { code: '1', product_name: 'X', ingredients: [{ id: 'en:sugar', text: 'sugar', is_in_taxonomy: 1 }, { text: 'best before see lid' }] },
+    'en'
+  )!.ingredientTree.map((node) => node.text).join('|') === 'sugar'
+);
+check(
+  'OFF food data on a row is read as a signal',
+  readIngredientTree([{ id: 'en:sugar', text: 'sugar', ciqual_food_code: '31016' }, { text: 'kombucha' }])
+    .map((node) => node.hasFoodProperties).join('|') === 'true|false'
 );
 
 // --- OFF text recognition (taxonomy_canonicalize_tags) ---------------------------

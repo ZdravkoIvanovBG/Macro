@@ -39,13 +39,15 @@
     "check:bundle": "expo export --platform ios --output-dir .expo-export-check --clear",
     "check:calc": "node scripts/check-calc.mts",
     "check:sql": "node scripts/check-sql.mts",
-    "check": "npm run typecheck && npm run check:calc && npm run check:sql && npm run check:stats && npm run check:off -- --offline && npm run check:deepl && npm run check:ingredients && npm run check:ingredient-names && npm run check:product-indicators",
+    "check": "npm run typecheck && npm run check:calc && npm run check:sql && npm run check:stats && npm run check:off -- --offline && npm run check:deepl && npm run check:ingredients && npm run check:ingredient-names && npm run check:ingredient-sanitizer && npm run check:product-indicators",
     "check:off": "node --import ./scripts/register-ts.mjs scripts/check-off.mts",
     "check:stats": "node --import ./scripts/register-ts.mjs scripts/check-stats.mts",
     "check:deepl": "node --import ./scripts/register-ts.mjs scripts/check-deepl.mts",
     "check:ingredients": "node --import ./scripts/register-ts.mjs scripts/check-ingredients.mts",
     "check:ingredient-names": "node --import ./scripts/register-ts.mjs scripts/check-ingredient-names.mts",
-    "check:product-indicators": "node --import ./scripts/register-ts.mjs scripts/check-product-indicators.mts"
+    "check:product-indicators": "node --import ./scripts/register-ts.mjs scripts/check-product-indicators.mts",
+    "check:ingredient-sanitizer": "node --import ./scripts/register-ts.mjs scripts/check-ingredient-sanitizer.mts",
+    "inspect:ingredients": "node --import ./scripts/register-ts.mjs scripts/inspect-ingredients.mts"
   },
   "private": true
 }

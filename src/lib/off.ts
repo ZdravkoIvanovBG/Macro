@@ -11,6 +11,11 @@
  * No API key, no account, no request body — everything is a plain GET.
  */
 import i18n, { type AppLanguage } from '../i18n/index';
+import {
+  looksLikeNonIngredientNote,
+  sanitizeIngredientTree,
+  type IngredientDecision,
+} from './ingredientSanitizer';
 import type { EntryPrefill, Nutrition } from './types';
 
 const SEARCH_URL = 'https://search.openfoodfacts.org/search';
@@ -169,6 +174,12 @@ export interface IngredientNode {
   text: string;
   /** OFF's `is_in_taxonomy`: the id is a real taxonomy entry, not one derived from free text. */
   isInTaxonomy: boolean;
+  /**
+   * OFF attached food data to this row (`ciqual_food_code`, `vegan`,
+   * `vegetarian`, `from_palm_oil` or `additive_class`) — it only does that for
+   * ingredients it recognised, so it's a "real ingredient" signal.
+   */
+  hasFoodProperties: boolean;
   percent: number | null;
   percentEstimate: number | null;
   percentMin: number | null;
@@ -187,8 +198,13 @@ export interface OffIngredientsProduct {
   name: string;
   brand: string | null;
   imageUrl: string | null;
-  /** OFF's structured ingredient list, in label order — see `IngredientNode`. */
+  /**
+   * OFF's structured ingredient list, in label order, with rows that are
+   * obviously not ingredients removed — see `sanitizeIngredientTree`.
+   */
   ingredientTree: IngredientNode[];
+  /** Why each raw row was kept or removed — for debugging only, never shown in production. */
+  ingredientDecisions: IngredientDecision[];
   /** Free-text ingredient list as OFF has it, when there's no structured breakdown. */
   ingredientsText: string | null;
   /**
@@ -314,6 +330,15 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
+/** Every brand on the product, not just the first — `brands` is a comma-joined string or an array. */
+function readAllBrands(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+  return list
+    .filter((b): b is string => typeof b === 'string')
+    .map((b) => b.trim())
+    .filter(Boolean);
+}
+
 /** `brands` is a comma-joined string on v2 and an array in the search index. */
 function readBrand(raw: unknown): string | null {
   if (Array.isArray(raw)) {
@@ -355,28 +380,9 @@ function toProduct(raw: unknown): OffProduct | null {
   };
 }
 
-/**
- * OFF's own ingredient parser occasionally spills non-ingredient label text
- * (storage instructions, best-before notes, certification marks) into the
- * structured `ingredients` array when a product's source text is messy. This
- * catches the common shapes of that boilerplate so it isn't shown as if it
- * were an ingredient.
- */
-const NON_INGREDIENT_PATTERNS: RegExp[] = [
-  /\d\s*°\s*[CF]\b/i,
-  /\bkj\b|\bkcal\b|\d\s*k(j|cal)\b/i,
-  /\b(best[\s-]?before|use by|sell by|expiry|expires?|shelf life|minimum durability|net weight|store(d)?\s+(below|above|in|at)|keep refrigerated|keep frozen|once opened|unopened|see lid|see (top|bottom|base|packaging))\b/i,
-  // Cyrillic letters fall outside \w in non-unicode regex mode, so \b never
-  // asserts around them — matched as plain substrings instead.
-  /(съхранявайте|срок на годност|годен до|дата на производство|минимален срок)/i,
-  /^\s*(eu|ec|бг|ес)\s*$/i,
-];
+export { looksLikeNonIngredientNote };
 
-export function looksLikeNonIngredientNote(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed === '') return true;
-  return NON_INGREDIENT_PATTERNS.some((pattern) => pattern.test(trimmed));
-}
+const FOOD_PROPERTY_FIELDS = ['ciqual_food_code', 'vegan', 'vegetarian', 'from_palm_oil', 'additive_class'];
 
 const MIN_SUBSTANTIAL_INGREDIENTS_TEXT_LENGTH = 15;
 
@@ -570,7 +576,9 @@ const MAX_INGREDIENT_DEPTH = 5;
 
 /**
  * Reads OFF's structured `ingredients[]` array into a tree, keeping OFF's
- * order (the label order, most to least by quantity) and nesting.
+ * order (the label order, most to least by quantity) and nesting. Reads every
+ * row as-is — deciding which rows aren't really ingredients is
+ * `sanitizeIngredientTree`'s job, so a bad row's children aren't lost with it.
  */
 function readIngredientTree(raw: unknown, depth = 0): IngredientNode[] {
   if (!Array.isArray(raw) || depth > MAX_INGREDIENT_DEPTH) return [];
@@ -578,12 +586,11 @@ function readIngredientTree(raw: unknown, depth = 0): IngredientNode[] {
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;
     const e = entry as Record<string, unknown>;
-    const text = firstString(e['text'], e['id']);
-    if (!text || looksLikeNonIngredientNote(text)) continue;
     nodes.push({
       id: firstString(e['id']),
-      text,
+      text: firstString(e['text'], e['id']) ?? '',
       isInTaxonomy: num(e['is_in_taxonomy']) === 1,
+      hasFoodProperties: FOOD_PROPERTY_FIELDS.some((field) => firstString(e[field]) !== null),
       percent: num(e['percent']),
       percentEstimate: num(e['percent_estimate']),
       percentMin: num(e['percent_min']),
@@ -656,13 +663,17 @@ function toIngredientsProduct(raw: unknown, lang: AppLanguage = 'en'): OffIngred
   const ingredientsTextLanguageGap = source !== null && source.lang !== lang;
   const structuredIngredients = readIngredients(p['ingredients']);
   const ingredients = source ? buildIngredientsFromSource(source, structuredIngredients) : [];
+  const sanitized = sanitizeIngredientTree(readIngredientTree(p['ingredients']), {
+    brands: readAllBrands(p['brands']),
+  });
 
   return {
     code,
     name,
     brand: readBrand(p['brands']),
     imageUrl: firstString(p['image_front_small_url'], p['image_small_url'], p['image_url']),
-    ingredientTree: readIngredientTree(p['ingredients']),
+    ingredientTree: sanitized.tree,
+    ingredientDecisions: sanitized.decisions,
     ingredientsText,
     ingredientsTextLanguageGap,
     ingredientsTextTranslated: false,
@@ -952,6 +963,7 @@ export const __testing = {
   toProduct,
   readHits,
   readBrand,
+  readAllBrands,
   buildSearchUrl,
   readIngredients,
   readIngredientTree,
