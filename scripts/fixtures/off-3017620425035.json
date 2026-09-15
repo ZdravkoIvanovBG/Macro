@@ -1,0 +1,114 @@
+{
+  "status": 1,
+  "product": {
+    "code": "3017620425035",
+    "product_name": "Nutella",
+    "brands": "Nutella, FERRERO FRANCE COMMERCIALE",
+    "lang": "fr",
+    "ingredients_lc": "fr",
+    "ingredients_text": "Sucre, huile de palme, NOISETTES 13%, LAIT écrémé en poudre 8,7%, cacao maigre 7,4%, émulsifiants: lécithines [SOJA]; vanilline. Sans gluten",
+    "ingredients_text_en": "UARE ALLE CAD be nutella FERRERO Da co 2252 336 KALE",
+    "ingredients_text_fr": "Sucre, huile de palme, NOISETTES 13%, LAIT écrémé en poudre 8,7%, cacao maigre 7,4%, émulsifiants: lécithines [SOJA]; vanilline. Sans gluten",
+    "ingredients_text_de": "Zucker, Palmöl, Haselnüsse (13%), Magermilchpulver (8,7 %), fettarmer Kakao (7,4%), Emulgator Lecithine (Soja), Vanillin.",
+    "ingredients": [
+      {
+        "ciqual_food_code": "31016",
+        "ciqual_proxy_food_code": "31016",
+        "ecobalyse_code": "5fc8032f-ca1c-4497-844b-f9213075eab3",
+        "id": "en:sugar",
+        "is_in_taxonomy": 1,
+        "percent_estimate": 50.96,
+        "quantity_estimate": 50.96,
+        "text": "Sucre",
+        "vegan": "maybe",
+        "vegetarian": "yes"
+      },
+      {
+        "ciqual_food_code": "16129",
+        "ecobalyse_code": "45658c32-66d9-4305-a34b-21d6a4cef89c",
+        "from_palm_oil": "yes",
+        "id": "en:palm-oil",
+        "is_in_taxonomy": 1,
+        "percent_estimate": 17.11,
+        "quantity_estimate": 17.11,
+        "text": "huile de palme",
+        "vegan": "yes",
+        "vegetarian": "yes"
+      },
+      {
+        "ciqual_food_code": "15004",
+        "ecobalyse_code": "hazelnut-unshelled-non-eu",
+        "id": "en:hazelnut",
+        "is_in_taxonomy": 1,
+        "percent": 13,
+        "percent_estimate": 12.5,
+        "quantity_estimate": 12.5,
+        "text": "NOISETTES",
+        "vegan": "yes",
+        "vegetarian": "yes"
+      },
+      {
+        "ciqual_food_code": "19054",
+        "ecobalyse_code": "b6776a28-ec84-4bf3-988c-07b3c29f6136",
+        "id": "en:skimmed-milk-powder",
+        "is_in_taxonomy": 1,
+        "percent": 8.7,
+        "percent_estimate": 8.45,
+        "quantity_estimate": 8.45,
+        "text": "LAIT écrémé en poudre",
+        "vegan": "no",
+        "vegetarian": "yes"
+      },
+      {
+        "ciqual_food_code": "18100",
+        "ciqual_proxy_food_code": "18100",
+        "id": "en:fat-reduced-cocoa",
+        "is_in_taxonomy": 1,
+        "percent": 7.4,
+        "percent_estimate": 7.15,
+        "quantity_estimate": 7.15,
+        "text": "cacao maigre",
+        "vegan": "yes",
+        "vegetarian": "yes"
+      },
+      {
+        "additive_class": "en:emulsifier",
+        "id": "en:e322",
+        "ingredients": [
+          {
+            "ciqual_food_code": "42200",
+            "id": "en:soya-lecithin",
+            "is_in_taxonomy": 1,
+            "percent_estimate": 5.33,
+            "quantity_estimate": 5.33,
+            "text": "lécithines de SOJA",
+            "vegan": "yes",
+            "vegetarian": "yes"
+          }
+        ],
+        "is_in_taxonomy": 1,
+        "percent_estimate": 5.33,
+        "quantity_estimate": 5.33,
+        "text": "lécithines",
+        "vegan": "maybe",
+        "vegetarian": "maybe"
+      },
+      {
+        "id": "en:vanillin",
+        "is_in_taxonomy": 1,
+        "percent_estimate": 0,
+        "quantity_estimate": 0,
+        "text": "vanilline",
+        "vegan": "yes",
+        "vegetarian": "yes"
+      }
+    ],
+    "allergens_tags": [
+      "en:milk",
+      "en:nuts",
+      "en:soybeans"
+    ],
+    "nova_group": 4,
+    "nutriscore_grade": "e"
+  }
+}

@@ -4,8 +4,14 @@
 // Run with: npm run check:deepl
 import { __testing } from '../src/lib/deepl.ts';
 
-const { extractTranslatedText, extractTranslatedTexts, postProcessTranslatedText, deeplTargetLang, isDeeplConfigured } =
-  __testing;
+const {
+  extractTranslatedText,
+  extractTranslatedTexts,
+  postProcessTranslatedText,
+  deeplTargetLang,
+  isDeeplConfigured,
+  buildTranslateRequest,
+} = __testing;
 
 let failures = 0;
 
@@ -58,6 +64,19 @@ check(
 // --- language mapping ---------------------------------------------------------
 check('bg maps to DeepL BG', deeplTargetLang('bg') === 'BG');
 check('en maps to a DeepL English variant', deeplTargetLang('en') === 'EN-US');
+
+// --- request shape --------------------------------------------------------------
+// DeepL rejects the old `auth_key` form field with 403 "Missing Authorization
+// header" — the key must travel in the header.
+const request = buildTranslateRequest(['цикламати', 'acid citric'], 'en', 'test-key:fx', 'One ingredient name per text.');
+const requestBody = new URLSearchParams(request.body);
+check('the key is sent as a DeepL-Auth-Key Authorization header', request.headers['Authorization'] === 'DeepL-Auth-Key test-key:fx');
+check('the key is never sent in the body', !requestBody.has('auth_key') && !request.body.includes('test-key'));
+check('the body is form-encoded', request.headers['Content-Type'] === 'application/x-www-form-urlencoded');
+check('every text is sent, in order', requestBody.getAll('text').join('|') === 'цикламати|acid citric');
+check('the target language is mapped', requestBody.get('target_lang') === 'EN-US');
+check('context is sent when given', requestBody.get('context') === 'One ingredient name per text.');
+check('context is omitted when not given', !new URLSearchParams(buildTranslateRequest(['x'], 'bg', 'k').body).has('context'));
 
 // --- configuration --------------------------------------------------------------
 check(

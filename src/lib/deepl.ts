@@ -1,8 +1,7 @@
 /**
  * DeepL API Free client — used only as a last resort for the ingredient
- * scanner, when Open Food Facts has no ingredient text in either app
- * language. No SDK, no account beyond the free API key: a single POST per
- * translation.
+ * scanner, when Open Food Facts has no name or text in the app language.
+ * No SDK, no account beyond the free API key: a single POST per batch.
  *
  * The key is read from `EXPO_PUBLIC_DEEPL_API_KEY`, inlined at build time
  * from a local `.env` file (see `.env.example`) that is never committed.
@@ -62,36 +61,51 @@ export function extractTranslatedText(payload: unknown): string | null {
   return extractTranslatedTexts(payload, 1)[0] ?? null;
 }
 
+/** DeepL accepts at most 50 `text` params per request. */
+const MAX_TEXTS_PER_REQUEST = 50;
+
 /**
- * Machine-translates `texts` into `targetLang`, one DeepL request for the
- * whole batch (order preserved). Each entry resolves to `null` on failure —
- * no key configured, offline, timeout, quota exhausted, malformed response,
- * or that particular translation missing from the response — so callers can
- * fall back per-item to whatever text is already available.
+ * The `/v2/translate` request for one batch. DeepL only accepts the key in
+ * the `Authorization` header — an `auth_key` body field is rejected with 403.
+ * `context` steers short, ambiguous fragments (e.g. a single ingredient name)
+ * and isn't billed as translated characters.
  */
-export async function translateTexts(
+export function buildTranslateRequest(
   texts: string[],
   targetLang: AppLanguage,
+  apiKey: string,
+  context?: string
+): { headers: Record<string, string>; body: string } {
+  const body = new URLSearchParams();
+  body.append('target_lang', deeplTargetLang(targetLang));
+  if (context) body.append('context', context);
+  for (const text of texts) body.append('text', text);
+  return {
+    headers: {
+      Authorization: `DeepL-Auth-Key ${apiKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  };
+}
+
+async function translateBatch(
+  texts: string[],
+  targetLang: AppLanguage,
+  context: string | undefined,
   signal?: AbortSignal
 ): Promise<Array<string | null>> {
-  if (texts.length === 0) return [];
-  if (!isDeeplConfigured()) return texts.map(() => null);
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   signal?.addEventListener('abort', onAbort);
 
   try {
-    const body = new URLSearchParams();
-    body.append('auth_key', API_KEY as string);
-    body.append('target_lang', deeplTargetLang(targetLang));
-    for (const text of texts) body.append('text', text);
-
+    const request = buildTranslateRequest(texts, targetLang, API_KEY as string, context);
     const response = await fetch(DEEPL_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
+      headers: request.headers,
+      body: request.body,
       signal: controller.signal,
     });
     if (!response.ok) return texts.map(() => null);
@@ -104,6 +118,29 @@ export async function translateTexts(
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/**
+ * Machine-translates `texts` into `targetLang` (order preserved), in as few
+ * DeepL requests as its per-request limit allows. Each entry resolves to
+ * `null` on failure — no key configured, offline, timeout, quota exhausted,
+ * malformed response, or that particular translation missing from the
+ * response — so callers can fall back per-item.
+ */
+export async function translateTexts(
+  texts: string[],
+  targetLang: AppLanguage,
+  signal?: AbortSignal,
+  context?: string
+): Promise<Array<string | null>> {
+  if (texts.length === 0) return [];
+  if (!isDeeplConfigured()) return texts.map(() => null);
+
+  const results: Array<string | null> = [];
+  for (let start = 0; start < texts.length; start += MAX_TEXTS_PER_REQUEST) {
+    results.push(...(await translateBatch(texts.slice(start, start + MAX_TEXTS_PER_REQUEST), targetLang, context, signal)));
+  }
+  return results;
 }
 
 /** Machine-translates a single string. See `translateTexts` for the batched form. */
@@ -122,4 +159,5 @@ export const __testing = {
   postProcessTranslatedText,
   deeplTargetLang,
   isDeeplConfigured,
+  buildTranslateRequest,
 };

@@ -1,0 +1,130 @@
+{
+  "canonical": {
+    "fr": {},
+    "bg": {
+      "вода": "en:water",
+      "фруктозо-глюкозен сироп": "en:glucose-fructose-syrup",
+      "сок от портокал от концентрат": "en:orange-juice-from-concentrate",
+      "киселина": "en:acid",
+      "лимонена киселина": "en:e330",
+      "витамин С": "en:vitamins",
+      "L-аскорбинова киселина": "en:e300",
+      "регулатор на киселинност": "en:acidity-regulator",
+      "натриеви цитрати": "en:e331",
+      "ароматизанти": "en:flavouring",
+      "стабилизатори": "en:stabiliser",
+      "акациева гума": "en:e414",
+      "алфа-токоферол": "en:e307",
+      "подсладители": "en:sweetener",
+      "ацесулфам К": "en:e950",
+      "оцветител": "en:colour",
+      "каротини": "en:e160a"
+    }
+  },
+  "taxonomy": {
+    "en:acid": {
+      "name": {
+        "bg": "Киселина",
+        "en": "Acid"
+      }
+    },
+    "en:acidity-regulator": {
+      "name": {
+        "bg": "Регулатор на киселинност",
+        "en": "Acidity regulator"
+      }
+    },
+    "en:colour": {
+      "name": {
+        "bg": "Оцветител",
+        "en": "Colour"
+      }
+    },
+    "en:e160a": {
+      "name": {
+        "bg": "E160a",
+        "en": "E160a"
+      }
+    },
+    "en:e300": {
+      "name": {
+        "bg": "E300",
+        "en": "E300"
+      }
+    },
+    "en:e307": {
+      "name": {
+        "bg": "E307",
+        "en": "E307"
+      }
+    },
+    "en:e330": {
+      "name": {
+        "bg": "E330",
+        "en": "E330"
+      }
+    },
+    "en:e331": {
+      "name": {
+        "bg": "E331",
+        "en": "E331"
+      }
+    },
+    "en:e414": {
+      "name": {
+        "bg": "E414",
+        "en": "E414"
+      }
+    },
+    "en:e950": {
+      "name": {
+        "bg": "E950",
+        "en": "E950"
+      }
+    },
+    "en:flavouring": {
+      "name": {
+        "bg": "аромат",
+        "en": "flavouring"
+      }
+    },
+    "en:glucose-fructose-syrup": {
+      "name": {
+        "bg": "глюкозо-фруктозен сироп",
+        "en": "glucose-fructose syrup"
+      },
+      "parents": []
+    },
+    "en:orange-juice-from-concentrate": {
+      "name": {
+        "bg": "концентриран сок от портокал",
+        "en": "orange juice from concentrate"
+      },
+      "parents": []
+    },
+    "en:stabiliser": {
+      "name": {
+        "bg": "Стабилизатор",
+        "en": "Stabiliser"
+      }
+    },
+    "en:sweetener": {
+      "name": {
+        "bg": "Подсладител",
+        "en": "Sweetener"
+      }
+    },
+    "en:vitamins": {
+      "name": {
+        "bg": "витамини",
+        "en": "vitamins"
+      }
+    },
+    "en:water": {
+      "name": {
+        "bg": "Вода",
+        "en": "water"
+      }
+    }
+  }
+}

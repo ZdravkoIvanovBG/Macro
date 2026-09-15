@@ -1,0 +1,32 @@
+{
+  "texts": [
+    "вода",
+    "фруктозо-глюкозен сироп",
+    "цикламати",
+    "D 1Le BG"
+  ],
+  "response": {
+    "canonical_tags": [
+      {
+        "exists_in_taxonomy": true,
+        "tag": "en:water"
+      },
+      {
+        "exists_in_taxonomy": true,
+        "tag": "en:glucose-fructose-syrup"
+      },
+      {
+        "exists_in_taxonomy": false,
+        "tag": "bg:цикламати"
+      },
+      {
+        "exists_in_taxonomy": false,
+        "tag": "bg:D 1Le BG"
+      }
+    ],
+    "canonical_tags_list": "en:water,en:glucose-fructose-syrup,bg:цикламати,bg:D 1Le BG",
+    "errors": [],
+    "status": "success",
+    "warnings": []
+  }
+}

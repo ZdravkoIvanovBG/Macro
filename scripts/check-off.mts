@@ -2,15 +2,27 @@
 // response shapes, then (unless --offline) makes live calls to confirm the
 // endpoints still behave as expected.
 // Run with: npm run check:off  /  npm run check:off -- --offline
+import { readFileSync } from 'node:fs';
 import {
+  fetchCanonicalIngredientIds,
   fetchIngredientsByBarcode,
   fetchIngredientTaxonomyNames,
   fetchProductByBarcode,
+  formatIngredientPercent,
   looksLikeNonIngredientNote,
   productToPrefill,
   searchFoods,
   __testing,
+  type IngredientNode,
 } from '../src/lib/off.ts';
+import {
+  canonicalKey,
+  collectCanonicalizationRequests,
+  collectIngredientIds,
+  hasCyrillic,
+  isBulgarianText,
+  localizeTree,
+} from '../src/lib/ingredientNames.ts';
 
 const {
   readPer100,
@@ -20,6 +32,9 @@ const {
   readBrand,
   buildSearchUrl,
   readIngredients,
+  readIngredientTree,
+  readCanonicalTags,
+  batchCanonicalizeTexts,
   toIngredientsProduct,
   readIngredientsTextByLanguage,
   selectIngredientsTextSource,
@@ -386,6 +401,97 @@ check(
     noStructuredIngredients.ingredients.every((i) => i.percent === null && i.percentEstimate === null)
 );
 
+// --- structured ingredient tree: Nutella 3017620425035 (real OFF response) ----
+const nutellaFixture = JSON.parse(
+  readFileSync(new URL('./fixtures/off-3017620425035.json', import.meta.url), 'utf8')
+) as { product: Record<string, unknown> };
+const nutellaProduct = toIngredientsProduct(nutellaFixture.product, 'en')!;
+const nutellaTree = nutellaProduct.ingredientTree;
+const nutellaNode = (id: string) => {
+  const walk = (nodes: IngredientNode[]): IngredientNode | undefined => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const found = walk(node.children);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return walk(nutellaTree);
+};
+
+check(
+  'Nutella: the tree keeps OFF order, top level only',
+  nutellaTree.map((n) => n.id).join('|') ===
+    'en:sugar|en:palm-oil|en:hazelnut|en:skimmed-milk-powder|en:fat-reduced-cocoa|en:e322|en:vanillin',
+  nutellaTree.map((n) => n.id).join('|')
+);
+check(
+  'Nutella: soya lecithin stays nested under E322, not flattened into the top level',
+  nutellaNode('en:e322')?.children.map((c) => c.id).join('|') === 'en:soya-lecithin'
+);
+check(
+  'Nutella: the malformed ingredients_text_en is nowhere in the tree',
+  !JSON.stringify(nutellaTree).includes('UARE') &&
+    !JSON.stringify(nutellaTree).includes(String(nutellaFixture.product['ingredients_text_en']))
+);
+check('Nutella: the fixture really carries the malformed en text', String(nutellaFixture.product['ingredients_text_en']).startsWith('UARE ALLE CAD'));
+check('Nutella: the taxonomy flag is read', nutellaTree.every((n) => n.isInTaxonomy));
+
+const percentOf = (id: string) => formatIngredientPercent(nutellaNode(id)!);
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+check('exact percent stays exact (hazelnut 13%)', sameJson(percentOf('en:hazelnut'), { kind: 'exact', value: 13 }));
+check('exact percent stays exact (skimmed milk powder 8.7%)', sameJson(percentOf('en:skimmed-milk-powder'), { kind: 'exact', value: 8.7 }));
+check('exact percent stays exact (fat-reduced cocoa 7.4%)', sameJson(percentOf('en:fat-reduced-cocoa'), { kind: 'exact', value: 7.4 }));
+check('no exact percent -> the estimate, marked as one (sugar)', sameJson(percentOf('en:sugar'), { kind: 'estimate', value: 50.96 }));
+check('a nested ingredient keeps its own estimate (soya lecithin)', sameJson(percentOf('en:soya-lecithin'), { kind: 'estimate', value: 5.33 }));
+check('an estimate of 0 shows no percentage rather than an invented one (vanillin)', percentOf('en:vanillin').kind === 'none');
+
+const bareNode: IngredientNode = {
+  id: 'en:salt',
+  text: 'salt',
+  isInTaxonomy: true,
+  percent: null,
+  percentEstimate: null,
+  percentMin: 0,
+  percentMax: 2,
+  children: [],
+};
+check('only an upper bound -> shown as a maximum (<2%)', sameJson(formatIngredientPercent(bareNode), { kind: 'max', value: 2 }));
+check('an upper bound of 100 says nothing', formatIngredientPercent({ ...bareNode, percentMax: 100 }).kind === 'none');
+check('an exact percent wins over an estimate and a bound', formatIngredientPercent({ ...bareNode, percent: 1.5, percentEstimate: 1 }).kind === 'exact');
+check('no structured array -> an empty tree', toIngredientsProduct({ code: '1', product_name: 'X' }, 'en')!.ingredientTree.length === 0);
+check(
+  'non-ingredient boilerplate is dropped from the tree too',
+  readIngredientTree([{ id: 'en:sugar', text: 'sugar' }, { text: 'best before see lid' }]).length === 1
+);
+
+// --- OFF text recognition (taxonomy_canonicalize_tags) ---------------------------
+const rawCanonicalize = JSON.parse(
+  readFileSync(new URL('./fixtures/off-canonicalize-raw-bg.json', import.meta.url), 'utf8')
+) as { texts: string[]; response: unknown };
+const recognized = readCanonicalTags(rawCanonicalize.response, rawCanonicalize.texts);
+check('real response: вода is recognised as en:water', recognized.get('вода') === 'en:water');
+check('real response: фруктозо-глюкозен сироп -> en:glucose-fructose-syrup', recognized.get('фруктозо-глюкозен сироп') === 'en:glucose-fructose-syrup');
+check('real response: an unrecognised text (echoed back as bg:…) is left out', !recognized.has('цикламати') && !recognized.has('D 1Le BG'));
+check(
+  'a response that doesn\'t line up with the request is ignored rather than misassigned',
+  readCanonicalTags({ canonical_tags: [{ exists_in_taxonomy: true, tag: 'en:water' }] }, ['вода', 'сол']).size === 0
+);
+check('a non-object response yields nothing', readCanonicalTags('oops', ['вода']).size === 0);
+check(
+  'texts containing a comma are never sent (the list is comma-separated)',
+  batchCanonicalizeTexts(['вода', 'сол, йодирана', 'захар']).flat().join('|') === 'вода|захар'
+);
+check('duplicate and blank texts are dropped', batchCanonicalizeTexts(['вода', ' вода ', '']).flat().join('|') === 'вода');
+check(
+  'long lists are split into several URL-sized batches without losing a text',
+  (() => {
+    const texts = Array.from({ length: 80 }, (_, i) => `съставка номер ${i}`);
+    const batches = batchCanonicalizeTexts(texts);
+    return batches.length > 1 && batches.flat().length === 80 && batches.every((b) => b.join(',').length <= 620);
+  })()
+);
+
 // --- query building ---------------------------------------------------------
 const localUrl = buildSearchUrl('oats', 12, 'en:bulgaria');
 check('country tag is added as a filter', localUrl.includes('countries_tags'), localUrl);
@@ -461,6 +567,61 @@ if (process.argv.includes('--offline')) {
       taxonomyNames['en:cow-s-milk']?.english === "cow's milk"
     );
     check('taxonomy lookup resolves a second common ingredient too', typeof taxonomyNames['en:sugar']?.localized === 'string');
+
+    // Nutella 3017620425035 end to end: structured tree + OFF taxonomy names, no DeepL.
+    const liveNutella = await fetchIngredientsByBarcode('3017620425035', 'en');
+    const liveTree = liveNutella?.ingredientTree ?? [];
+    check(
+      'Nutella (live): structured tree has E322 with soya lecithin nested under it',
+      liveTree.find((n) => n.id === 'en:e322')?.children.some((c) => c.id === 'en:soya-lecithin') ?? false,
+      JSON.stringify(liveTree.map((n) => [n.id, n.children.map((c) => c.id)]))
+    );
+    for (const lang of ['en', 'bg'] as const) {
+      const names = await fetchIngredientTaxonomyNames(collectIngredientIds(liveTree), lang);
+      const flat: string[] = [];
+      const walk = (nodes: ReturnType<typeof localizeTree>) =>
+        nodes.forEach((n) => {
+          flat.push(n.displayName ?? '<unnamed>');
+          walk(n.children);
+        });
+      walk(localizeTree(liveTree, { taxonomy: names }, lang));
+      const inLanguage = flat.every((name) =>
+        /^E\d{3,4}[a-z]*$/i.test(name) ? true : lang === 'bg' ? hasCyrillic(name) : !hasCyrillic(name) && name !== '<unnamed>'
+      );
+      check(`Nutella (live): every ingredient is named in ${lang} from OFF taxonomy alone`, flat.length > 0 && inLanguage, flat.join(', '));
+    }
+
+    // Cappy PULPY 5449000147417: a label OFF parsed in the wrong language —
+    // names must come from the label text and OFF text recognition, not "unknown".
+    const liveCappy = await fetchIngredientsByBarcode('5449000147417', 'bg');
+    const cappyTree = liveCappy?.ingredientTree ?? [];
+    for (const lang of ['bg', 'en'] as const) {
+      const taxonomy = await fetchIngredientTaxonomyNames(collectIngredientIds(cappyTree), lang);
+      const canonical = new Map<string, string>();
+      for (const [lc, texts] of collectCanonicalizationRequests(cappyTree, taxonomy, lang)) {
+        for (const [text, id] of await fetchCanonicalIngredientIds(texts, lc)) canonical.set(canonicalKey(lc, text), id);
+      }
+      Object.assign(taxonomy, await fetchIngredientTaxonomyNames(Array.from(new Set(canonical.values())), lang));
+      const rows: Array<{ text: string; name: string | null }> = [];
+      const walk = (nodes: ReturnType<typeof localizeTree>) =>
+        nodes.forEach((n) => {
+          rows.push({ text: n.text, name: n.displayName });
+          walk(n.children);
+        });
+      walk(localizeTree(cappyTree, { taxonomy, canonical }, lang));
+      if (lang === 'bg') {
+        const unnamedBulgarian = rows.filter((r) => isBulgarianText(r.text) && r.name === null);
+        check('Cappy (live) bg: no Bulgarian label text shows as unknown', rows.length > 0 && unnamedBulgarian.length === 0, unnamedBulgarian.map((r) => r.text).join(', '));
+      } else {
+        const nameFor = (text: string) => rows.find((r) => r.text === text)?.name;
+        check(
+          'Cappy (live) en: OFF recognises the Bulgarian label text (вода -> Water, фруктозо-глюкозен сироп -> Glucose-fructose syrup)',
+          nameFor('вода') === 'Water' && nameFor('фруктозо-глюкозен сироп') === 'Glucose-fructose syrup',
+          `${nameFor('вода')} / ${nameFor('фруктозо-глюкозен сироп')}`
+        );
+        check('Cappy (live) en: no Cyrillic in the English list', rows.every((r) => !hasCyrillic(r.name ?? '')));
+      }
+    }
 
     const emptyTaxonomy = await fetchIngredientTaxonomyNames([], 'bg');
     check('an empty id list makes no request and returns an empty result', Object.keys(emptyTaxonomy).length === 0);

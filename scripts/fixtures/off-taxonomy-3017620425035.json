@@ -1,0 +1,56 @@
+{
+  "en:e322": {
+    "name": {
+      "bg": "E322",
+      "en": "E322"
+    }
+  },
+  "en:fat-reduced-cocoa": {
+    "name": {
+      "bg": "какао с намалено съдържание на мазнини",
+      "en": "fat reduced cocoa"
+    },
+    "parents": []
+  },
+  "en:hazelnut": {
+    "name": {
+      "bg": "лешник",
+      "en": "hazelnut"
+    },
+    "parents": []
+  },
+  "en:palm-oil": {
+    "name": {
+      "bg": "Палмово масло",
+      "en": "palm oil"
+    },
+    "parents": []
+  },
+  "en:skimmed-milk-powder": {
+    "name": {
+      "bg": "обезмаслено сухо мляко",
+      "en": "skimmed milk powder"
+    },
+    "parents": []
+  },
+  "en:soya-lecithin": {
+    "name": {
+      "bg": "соев лецитин",
+      "en": "soya lecithin"
+    },
+    "parents": []
+  },
+  "en:sugar": {
+    "name": {
+      "bg": "Захар",
+      "en": "sugar"
+    },
+    "parents": []
+  },
+  "en:vanillin": {
+    "name": {
+      "bg": "Ванилин",
+      "en": "vanillin"
+    }
+  }
+}

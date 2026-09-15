@@ -14,12 +14,21 @@ import { fmtDecimal } from '../lib/format';
 import {
   describeOffError,
   fetchIngredientsByBarcode,
-  type OffIngredient,
+  formatIngredientPercent,
   type OffIngredientsProduct,
 } from '../lib/off';
-import { resolveIngredientNames, withTranslationFallback } from '../lib/ingredientsTranslation';
+import { localizeIngredientTree, withTranslationFallback } from '../lib/ingredientsTranslation';
+import type { LocalizedIngredientNode } from '../lib/ingredientNames';
+import type { AppLanguage } from '../i18n';
 import { lookupIngredientInfo, type ConcernNote as ConcernNoteResult, type RiskTier } from '../lib/ingredientGlossary';
 import { assessProductRisk, type Verdict } from '../lib/ingredientRisk';
+import {
+  normalizeNovaGroup,
+  normalizeNutriScore,
+  novaDescriptionKey,
+  nutriScoreDescriptionKey,
+  type NutriScoreGrade,
+} from '../lib/productIndicators';
 import { describeAllergen } from '../lib/allergens';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -29,7 +38,22 @@ type LoadState =
   | { phase: 'loading' }
   | { phase: 'not-found' }
   | { phase: 'error'; message: string }
-  | { phase: 'ready'; product: OffIngredientsProduct };
+  | { phase: 'ready'; product: OffIngredientsProduct; tree: LocalizedIngredientNode[] };
+
+type Report = { product: OffIngredientsProduct; tree: LocalizedIngredientNode[] };
+
+/**
+ * The list comes from OFF's structured ingredients, named in `language`. The
+ * free-text list is only a fallback for products with no structured data, so
+ * it's only translated then.
+ */
+async function loadReport(barcode: string, language: AppLanguage): Promise<Report | null> {
+  const product = await fetchIngredientsByBarcode(barcode, language);
+  if (!product) return null;
+  const tree = await localizeIngredientTree(product.ingredientTree, language);
+  if (tree.length > 0) return { product, tree };
+  return { product: await withTranslationFallback(product, language), tree };
+}
 
 export default function IngredientsReportScreen({ route, navigation }: Props) {
   const { barcode } = route.params;
@@ -43,17 +67,9 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
     async function load() {
       setState({ phase: 'loading' });
       try {
-        const product = await fetchIngredientsByBarcode(barcode, language);
+        const report = await loadReport(barcode, language);
         if (cancelled) return;
-        if (!product) {
-          setState({ phase: 'not-found' });
-          return;
-        }
-        const translated = await withTranslationFallback(product, language);
-        if (cancelled) return;
-        const ingredients = await resolveIngredientNames(translated.ingredients, language);
-        if (cancelled) return;
-        setState({ phase: 'ready', product: { ...translated, ingredients } });
+        setState(report ? { phase: 'ready', ...report } : { phase: 'not-found' });
       } catch (err) {
         if (cancelled) return;
         setState({ phase: 'error', message: describeOffError(err) });
@@ -74,16 +90,8 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
 
   function retry() {
     setState({ phase: 'loading' });
-    void fetchIngredientsByBarcode(barcode, language)
-      .then(async (product) => {
-        if (!product) {
-          setState({ phase: 'not-found' });
-          return;
-        }
-        const translated = await withTranslationFallback(product, language);
-        const ingredients = await resolveIngredientNames(translated.ingredients, language);
-        setState({ phase: 'ready', product: { ...translated, ingredients } });
-      })
+    void loadReport(barcode, language)
+      .then((report) => setState(report ? { phase: 'ready', ...report } : { phase: 'not-found' }))
       .catch((err) => setState({ phase: 'error', message: describeOffError(err) }));
   }
 
@@ -126,9 +134,9 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
     );
   }
 
-  const { product } = state;
-  const hasStructured = product.ingredients.length > 0;
-  const hasAnyData = hasStructured || Boolean(product.ingredientsText);
+  const { product, tree } = state;
+  const hasTree = tree.length > 0;
+  const hasAnyData = hasTree || Boolean(product.ingredientsText);
   const assessment = assessProductRisk(
     product.ingredients,
     product.novaGroup,
@@ -164,6 +172,7 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
       </View>
 
       <ScoreHeader assessment={assessment} />
+      <ProductIndicators novaGroup={product.novaGroup} nutriscoreGrade={product.nutriscoreGrade} />
 
       {!hasAnyData ? (
         <EmptyState
@@ -173,17 +182,15 @@ export default function IngredientsReportScreen({ route, navigation }: Props) {
         />
       ) : (
         <>
-          {hasStructured ? (
+          {hasTree ? (
             <>
               <Text className="px-1 text-xs leading-4 text-neutral-500">
                 {t('ingredients.orderNote')}
               </Text>
-              <IngredientList ingredients={product.ingredients} language={language} />
+              <IngredientList nodes={tree} language={language} />
             </>
-          ) : null}
-
-          {product.ingredientsText ? (
-            <Card title={hasStructured ? t('ingredients.rawTextTitle') : undefined}>
+          ) : product.ingredientsText ? (
+            <Card>
               <Text className="text-sm leading-5 text-neutral-300">{product.ingredientsText}</Text>
               {product.ingredientsTextTranslated ? (
                 <Text className="mt-2 text-xs leading-4 text-neutral-500">
@@ -267,6 +274,83 @@ function ScoreHeader({ assessment }: { assessment: { score: number | null; verdi
   );
 }
 
+const NUTRI_SCORE_COLORS: Record<NutriScoreGrade, string> = {
+  a: theme.accent,
+  b: theme.accent,
+  c: theme.carbs,
+  d: theme.danger,
+  e: theme.danger,
+};
+
+/**
+ * NOVA and Nutri-Score as Open Food Facts reports them — informational, kept
+ * visually apart from the app's own safety score above. NOVA's chip stays
+ * neutral: a processing group isn't a danger rating.
+ */
+function ProductIndicators({
+  novaGroup,
+  nutriscoreGrade,
+}: {
+  novaGroup: number | null;
+  nutriscoreGrade: string | null;
+}) {
+  const { t } = useTranslation();
+  const nova = normalizeNovaGroup(novaGroup);
+  const nutriScore = normalizeNutriScore(nutriscoreGrade);
+
+  return (
+    <View className="gap-1.5">
+      <View className="rounded-2xl border border-ink-line bg-ink-soft px-3.5">
+        <IndicatorRow
+          title={t('ingredients.processingTitle')}
+          badge={nova === null ? null : t('ingredients.novaBadge', { group: nova })}
+          badgeColor={theme.textDim}
+          description={t(novaDescriptionKey(nova))}
+        />
+        <View className="h-px bg-ink-line" />
+        <IndicatorRow
+          title={t('ingredients.nutritionTitle')}
+          badge={nutriScore === null ? null : t('ingredients.nutriScoreBadge', { grade: nutriScore.toUpperCase() })}
+          badgeColor={nutriScore === null ? theme.textFaint : NUTRI_SCORE_COLORS[nutriScore]}
+          description={t(nutriScoreDescriptionKey(nutriScore))}
+        />
+      </View>
+      <Text className="px-1 text-xs leading-4 text-neutral-500">{t('ingredients.indicatorsSource')}</Text>
+    </View>
+  );
+}
+
+function IndicatorRow({
+  title,
+  badge,
+  badgeColor,
+  description,
+}: {
+  title: string;
+  /** Null when OFF has no value — the description then says so instead. */
+  badge: string | null;
+  badgeColor: string;
+  description: string;
+}) {
+  return (
+    <View className="py-3">
+      <Text className="text-xs uppercase tracking-wide text-neutral-500">{title}</Text>
+      <View className="mt-1.5 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        {badge ? (
+          <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: `${badgeColor}22` }}>
+            <Text className="text-xs font-semibold" style={{ color: badgeColor }}>
+              {badge}
+            </Text>
+          </View>
+        ) : null}
+        <Text className={badge ? 'flex-shrink text-sm text-white' : 'flex-shrink text-sm text-neutral-500'}>
+          {description}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function RiskBadge({ tier }: { tier: RiskTier | 'unrated' }) {
   const { t } = useTranslation();
   const label =
@@ -295,25 +379,21 @@ function RiskBadge({ tier }: { tier: RiskTier | 'unrated' }) {
 const INITIAL_VISIBLE_COUNT = 5;
 
 function IngredientList({
-  ingredients,
+  nodes,
   language,
 }: {
-  ingredients: OffIngredient[];
-  language: 'en' | 'bg';
+  nodes: LocalizedIngredientNode[];
+  language: AppLanguage;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? ingredients : ingredients.slice(0, INITIAL_VISIBLE_COUNT);
-  const remaining = ingredients.length - visible.length;
+  const visible = expanded ? nodes : nodes.slice(0, INITIAL_VISIBLE_COUNT);
+  const remaining = nodes.length - visible.length;
 
   return (
     <View className="gap-2">
-      {visible.map((ingredient) => (
-        <IngredientRow
-          key={`${ingredient.rank}-${ingredient.id ?? ingredient.text}`}
-          ingredient={ingredient}
-          language={language}
-        />
+      {visible.map((node, index) => (
+        <IngredientRow key={`${index}-${node.id ?? node.text}`} node={node} rank={index} language={language} />
       ))}
       {!expanded && remaining > 0 ? (
         <Button
@@ -326,42 +406,55 @@ function IngredientList({
   );
 }
 
+function usePercentLabel(node: LocalizedIngredientNode): string | null {
+  const { t } = useTranslation();
+  const percent = formatIngredientPercent(node);
+  switch (percent.kind) {
+    case 'exact':
+      return t('ingredients.percentExact', { percent: fmtDecimal(percent.value, 1) });
+    case 'estimate':
+      return t('ingredients.percentEstimated', { percent: fmtDecimal(percent.value, 1) });
+    case 'max':
+      return t('ingredients.percentMax', { percent: fmtDecimal(percent.value, 1) });
+    default:
+      return null;
+  }
+}
+
+/** An ingredient with no name in the app's language gets a placeholder, never a name in another language. */
+function IngredientName({ node, className }: { node: LocalizedIngredientNode; className: string }) {
+  const { t } = useTranslation();
+  if (node.displayName === null) {
+    return <Text className={`${className} italic text-neutral-500`}>{t('ingredients.unnamedIngredient')}</Text>;
+  }
+  return <Text className={`${className} text-white`}>{node.displayName}</Text>;
+}
+
 function IngredientRow({
-  ingredient,
+  node,
+  rank,
   language,
 }: {
-  ingredient: OffIngredient;
-  language: 'en' | 'bg';
+  node: LocalizedIngredientNode;
+  rank: number;
+  language: AppLanguage;
 }) {
-  const { t } = useTranslation();
-  const percent = ingredient.percent ?? ingredient.percentEstimate;
-  const percentLabel =
-    percent === null
-      ? null
-      : ingredient.percent !== null
-        ? t('ingredients.percentExact', { percent: fmtDecimal(percent, 1) })
-        : t('ingredients.percentEstimated', { percent: fmtDecimal(percent, 1) });
-  const info = lookupIngredientInfo(ingredient, language);
+  const percentLabel = usePercentLabel(node);
+  const info = lookupIngredientInfo(node, language);
 
   return (
     <View className="flex-row items-start gap-3 rounded-2xl border border-ink-line bg-ink-soft p-3.5">
       <View className="h-6 w-6 items-center justify-center rounded-full bg-ink">
-        <Text className="text-[11px] font-semibold text-neutral-400">{ingredient.rank + 1}</Text>
+        <Text className="text-[11px] font-semibold text-neutral-400">{rank + 1}</Text>
       </View>
       <View className="flex-1">
         <View className="flex-row items-start justify-between gap-2">
-          <View className="flex-1 flex-row flex-wrap items-baseline gap-x-1.5">
-            <Text className="text-[15px] font-medium text-white">{ingredient.displayName}</Text>
-            {ingredient.displayNameIsFallback ? (
-              <Text className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                {t('ingredients.nameFallbackTag')}
-              </Text>
-            ) : null}
+          <View className="flex-1">
+            <IngredientName node={node} className="text-[15px] font-medium" />
           </View>
-          {percentLabel ? (
-            <Text className="text-xs text-neutral-500">{percentLabel}</Text>
-          ) : null}
+          {percentLabel ? <Text className="text-xs text-neutral-500">{percentLabel}</Text> : null}
         </View>
+        {node.children.length > 0 ? <NestedIngredients nodes={node.children} /> : null}
         <View className="mt-1.5">
           <RiskBadge tier={info?.tier ?? 'unrated'} />
         </View>
@@ -369,12 +462,33 @@ function IngredientRow({
           <Text className="mt-1.5 text-xs leading-4 text-neutral-400">{info.description}</Text>
         ) : null}
         {info ? <ConcernNote concernNote={info.concernNote} /> : null}
-        {ingredient.displayNameIsFallback ? (
-          <Text className="mt-1.5 text-xs leading-4 text-neutral-500">
-            {t('ingredients.nameFallbackNote')}
-          </Text>
-        ) : null}
       </View>
+    </View>
+  );
+}
+
+/** Sub-ingredients stay inside their parent's card, indented under its name. */
+function NestedIngredients({ nodes }: { nodes: LocalizedIngredientNode[] }) {
+  return (
+    <View className="mt-1.5 gap-1 border-l border-ink-line pl-3">
+      {nodes.map((child, index) => (
+        <NestedIngredientRow key={`${index}-${child.id ?? child.text}`} node={child} />
+      ))}
+    </View>
+  );
+}
+
+function NestedIngredientRow({ node }: { node: LocalizedIngredientNode }) {
+  const percentLabel = usePercentLabel(node);
+  return (
+    <View>
+      <View className="flex-row items-start justify-between gap-2">
+        <View className="flex-1">
+          <IngredientName node={node} className="text-sm" />
+        </View>
+        {percentLabel ? <Text className="text-xs text-neutral-500">{percentLabel}</Text> : null}
+      </View>
+      {node.children.length > 0 ? <NestedIngredients nodes={node.children} /> : null}
     </View>
   );
 }

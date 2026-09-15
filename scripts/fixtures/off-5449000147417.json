@@ -1,0 +1,434 @@
+{
+  "status": 1,
+  "product": {
+    "code": "5449000147417",
+    "product_name": "Cappy PULPY",
+    "brands": "Cappy",
+    "lang": "fr",
+    "ingredients_lc": "fr",
+    "ingredients_text": "D 1Le BG: Негазирана напитка със сок от портокал от концентрат, с пулп от портокал, с добавен витамин С. Със захари и подсладители. Плодово съдържание 7%. Пастьоризирана. Съставки: вода, фруктозо-глюкозен сироп, пулп от портокал (4%), сок от портокал от концентрат (3%), киселина (лимонена киселина), витамин С (L-аскорбинова киселина), регулатор на киселинност (натриеви цитрати), ароматизанти, стабилизатори (акациева гума, глицеролови естери на дървесни смоли, алфа-токоферол), подсладители (цикламати, стевиолови гликозиди от стевия, ацесулфам К), оцветител (каротини). MD: Băuturà răcoritoare necarbogazoasă cu suc de portocale din concentrat (3%) si pulpă de portocale (4%), cu zaharuri si indulcitori. Produs pasteurizat. Ingrediente: apã, sirop de glucozã-fructozã, pulpã de portocale (4%), suc de portocale din concentrat (3%), acidifiant (acid citric), vitamina C (acid L-ascorbic), corector de aciditate (citrati de sodiu), arome, stabilizatori (guma de acacia, esteri glicerici ai rasinilor din lemn, alfa-tocoferol), indulcitori (ciclamati, glicozide steviolice din stevia, acesulfam-K), colorant (caroteni).",
+    "ingredients_text_fr": "D 1Le BG: Негазирана напитка със сок от портокал от концентрат, с пулп от портокал, с добавен витамин С. Със захари и подсладители. Плодово съдържание 7%. Пастьоризирана. Съставки: вода, фруктозо-глюкозен сироп, пулп от портокал (4%), сок от портокал от концентрат (3%), киселина (лимонена киселина), витамин С (L-аскорбинова киселина), регулатор на киселинност (натриеви цитрати), ароматизанти, стабилизатори (акациева гума, глицеролови естери на дървесни смоли, алфа-токоферол), подсладители (цикламати, стевиолови гликозиди от стевия, ацесулфам К), оцветител (каротини). MD: Băuturà răcoritoare necarbogazoasă cu suc de portocale din concentrat (3%) si pulpă de portocale (4%), cu zaharuri si indulcitori. Produs pasteurizat. Ingrediente: apã, sirop de glucozã-fructozã, pulpã de portocale (4%), suc de portocale din concentrat (3%), acidifiant (acid citric), vitamina C (acid L-ascorbic), corector de aciditate (citrati de sodiu), arome, stabilizatori (guma de acacia, esteri glicerici ai rasinilor din lemn, alfa-tocoferol), indulcitori (ciclamati, glicozide steviolice din stevia, acesulfam-K), colorant (caroteni).",
+    "ingredients_text_bg": "вода, фруктозо-глюкозен сироп, пулп от портокал (4%), сок от портокал от концентрат (3%), киселина (лимонена киселина), витамин С (L-аскорбинова киселина), регулатор на киселинност (натриеви цитрати), ароматизанти, стабилизатори (акациева гума, глицеролови естери на дървесни смоли, алфа-токоферол), подсладители (цикламати, стевиолови гликозиди от стевия, ацесулфам К), оцветител (каротини)",
+    "ingredients_text_en": "Water, sugar or fructose-glucose syrup, orange pulp (5%), orange juice concentrate, acidity regulators (citric acid, sodium citrate), thickening agents (acacia gum, glycerol esters of wood rosins), flavourings, antioxidant (ascorbic acid), colour (beta-carotene).",
+    "ingredients": [
+      {
+        "id": "fr:D 1Le BG",
+        "ingredients": [
+          {
+            "id": "fr:Негазирана напитка със сок от портокал от концентрат",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 51.9,
+            "quantity_estimate": 51.9,
+            "text": "Негазирана напитка със сок от портокал от концентрат"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 51.9,
+        "quantity_estimate": 51.9,
+        "text": "D 1Le BG"
+      },
+      {
+        "id": "fr:с пулп от портокал",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 15.98,
+        "quantity_estimate": 15.98,
+        "text": "с пулп от портокал"
+      },
+      {
+        "id": "fr:с добавен витамин С",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 8.02,
+        "quantity_estimate": 8.02,
+        "text": "с добавен витамин С"
+      },
+      {
+        "id": "fr:Със захари и подсладители",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 4.92,
+        "quantity_estimate": 4.92,
+        "text": "Със захари и подсладители"
+      },
+      {
+        "id": "fr:Плодово съдържание",
+        "is_in_taxonomy": 0,
+        "percent": 7,
+        "percent_estimate": 3.36,
+        "quantity_estimate": 3.36,
+        "text": "Плодово съдържание"
+      },
+      {
+        "id": "fr:Пастьоризирана",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 2.47,
+        "quantity_estimate": 2.47,
+        "text": "Пастьоризирана"
+      },
+      {
+        "id": "fr:Съставки",
+        "ingredients": [
+          {
+            "id": "fr:вода",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 1.9,
+            "quantity_estimate": 1.9,
+            "text": "вода"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 1.9,
+        "quantity_estimate": 1.9,
+        "text": "Съставки"
+      },
+      {
+        "id": "fr:фруктозо-глюкозен сироп",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 1.51,
+        "quantity_estimate": 1.51,
+        "text": "фруктозо-глюкозен сироп"
+      },
+      {
+        "id": "fr:пулп от портокал",
+        "is_in_taxonomy": 0,
+        "percent": 4,
+        "percent_estimate": 1.24,
+        "quantity_estimate": 1.24,
+        "text": "пулп от портокал"
+      },
+      {
+        "id": "fr:сок от портокал от концентрат",
+        "is_in_taxonomy": 0,
+        "percent": 3,
+        "percent_estimate": 1.04,
+        "quantity_estimate": 1.04,
+        "text": "сок от портокал от концентрат"
+      },
+      {
+        "id": "fr:киселина",
+        "ingredients": [
+          {
+            "id": "fr:лимонена киселина",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.88,
+            "quantity_estimate": 0.88,
+            "text": "лимонена киселина"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.88,
+        "quantity_estimate": 0.88,
+        "text": "киселина"
+      },
+      {
+        "id": "fr:витамин С",
+        "ingredients": [
+          {
+            "id": "fr:L-аскорбинова киселина",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.76,
+            "quantity_estimate": 0.76,
+            "text": "L-аскорбинова киселина"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.76,
+        "quantity_estimate": 0.76,
+        "text": "витамин С"
+      },
+      {
+        "id": "fr:регулатор на киселинност",
+        "ingredients": [
+          {
+            "id": "fr:натриеви цитрати",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.66,
+            "quantity_estimate": 0.66,
+            "text": "натриеви цитрати"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.66,
+        "quantity_estimate": 0.66,
+        "text": "регулатор на киселинност"
+      },
+      {
+        "id": "fr:ароматизанти",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.58,
+        "quantity_estimate": 0.58,
+        "text": "ароматизанти"
+      },
+      {
+        "id": "fr:стабилизатори",
+        "ingredients": [
+          {
+            "id": "fr:акациева гума",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.36,
+            "quantity_estimate": 0.36,
+            "text": "акациева гума"
+          },
+          {
+            "id": "fr:глицеролови естери на дървесни смоли",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.11,
+            "quantity_estimate": 0.11,
+            "text": "глицеролови естери на дървесни смоли"
+          },
+          {
+            "id": "fr:алфа-токоферол",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.05,
+            "quantity_estimate": 0.05,
+            "text": "алфа-токоферол"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.52,
+        "quantity_estimate": 0.52,
+        "text": "стабилизатори"
+      },
+      {
+        "id": "fr:подсладители",
+        "ingredients": [
+          {
+            "id": "fr:цикламати",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.32,
+            "quantity_estimate": 0.32,
+            "text": "цикламати"
+          },
+          {
+            "id": "fr:стевиолови гликозиди от стевия",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.1,
+            "quantity_estimate": 0.1,
+            "text": "стевиолови гликозиди от стевия"
+          },
+          {
+            "id": "fr:ацесулфам К",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.05,
+            "quantity_estimate": 0.05,
+            "text": "ацесулфам К"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.47,
+        "quantity_estimate": 0.47,
+        "text": "подсладители"
+      },
+      {
+        "id": "fr:оцветител",
+        "ingredients": [
+          {
+            "id": "fr:каротини",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.42,
+            "quantity_estimate": 0.42,
+            "text": "каротини"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.42,
+        "quantity_estimate": 0.42,
+        "text": "оцветител"
+      },
+      {
+        "id": "fr:MD",
+        "ingredients": [
+          {
+            "id": "fr:Băuturà răcoritoare necarbogazoasă cu suc de portocale din concentrat",
+            "is_in_taxonomy": 0,
+            "percent": 3,
+            "percent_estimate": 0.29,
+            "quantity_estimate": 0.29,
+            "text": "Băuturà răcoritoare necarbogazoasă cu suc de portocale din concentrat"
+          },
+          {
+            "id": "fr:si pulpă de portocale",
+            "is_in_taxonomy": 0,
+            "percent": 4,
+            "percent_estimate": 0.09,
+            "quantity_estimate": 0.09,
+            "text": "si pulpă de portocale"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.38,
+        "quantity_estimate": 0.38,
+        "text": "MD"
+      },
+      {
+        "id": "fr:cu zaharuri si indulcitori",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.35,
+        "quantity_estimate": 0.35,
+        "text": "cu zaharuri si indulcitori"
+      },
+      {
+        "id": "fr:Produs pasteurizat",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.32,
+        "quantity_estimate": 0.32,
+        "text": "Produs pasteurizat"
+      },
+      {
+        "id": "fr:Ingrediente",
+        "ingredients": [
+          {
+            "id": "fr:apã",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.29,
+            "quantity_estimate": 0.29,
+            "text": "apã"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.29,
+        "quantity_estimate": 0.29,
+        "text": "Ingrediente"
+      },
+      {
+        "id": "fr:sirop de glucozã-fructozã",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.27,
+        "quantity_estimate": 0.27,
+        "text": "sirop de glucozã-fructozã"
+      },
+      {
+        "id": "fr:pulpã de portocale",
+        "is_in_taxonomy": 0,
+        "percent": 4,
+        "percent_estimate": 0.25,
+        "quantity_estimate": 0.25,
+        "text": "pulpã de portocale"
+      },
+      {
+        "id": "fr:suc de portocale din concentrat",
+        "is_in_taxonomy": 0,
+        "percent": 3,
+        "percent_estimate": 0.23,
+        "quantity_estimate": 0.23,
+        "text": "suc de portocale din concentrat"
+      },
+      {
+        "id": "fr:acid citric",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.22,
+        "quantity_estimate": 0.22,
+        "text": "acid citric"
+      },
+      {
+        "id": "fr:vitamina C",
+        "ingredients": [
+          {
+            "id": "fr:acid L-ascorbic",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.2,
+            "quantity_estimate": 0.2,
+            "text": "acid L-ascorbic"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.2,
+        "quantity_estimate": 0.2,
+        "text": "vitamina C"
+      },
+      {
+        "id": "fr:corector de aciditate",
+        "ingredients": [
+          {
+            "id": "fr:citrati de sodiu",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.19,
+            "quantity_estimate": 0.19,
+            "text": "citrati de sodiu"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.19,
+        "quantity_estimate": 0.19,
+        "text": "corector de aciditate"
+      },
+      {
+        "id": "en:flavouring",
+        "is_in_taxonomy": 1,
+        "percent_estimate": 0.18,
+        "quantity_estimate": 0.18,
+        "text": "arome",
+        "vegan": "maybe",
+        "vegetarian": "maybe"
+      },
+      {
+        "id": "fr:stabilizatori",
+        "ingredients": [
+          {
+            "id": "fr:guma de acacia",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.12,
+            "quantity_estimate": 0.12,
+            "text": "guma de acacia"
+          },
+          {
+            "id": "fr:esteri glicerici ai rasinilor din lemn",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.04,
+            "quantity_estimate": 0.04,
+            "text": "esteri glicerici ai rasinilor din lemn"
+          },
+          {
+            "id": "fr:alfa-tocoferol",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.02,
+            "quantity_estimate": 0.02,
+            "text": "alfa-tocoferol"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.18,
+        "quantity_estimate": 0.18,
+        "text": "stabilizatori"
+      },
+      {
+        "id": "fr:indulcitori",
+        "ingredients": [
+          {
+            "id": "fr:ciclamati",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.11,
+            "quantity_estimate": 0.11,
+            "text": "ciclamati"
+          },
+          {
+            "id": "fr:glicozide steviolice din stevia",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.03,
+            "quantity_estimate": 0.03,
+            "text": "glicozide steviolice din stevia"
+          },
+          {
+            "id": "fr:acesulfam-K",
+            "is_in_taxonomy": 0,
+            "percent_estimate": 0.02,
+            "quantity_estimate": 0.02,
+            "text": "acesulfam-K"
+          }
+        ],
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.16,
+        "quantity_estimate": 0.16,
+        "text": "indulcitori"
+      },
+      {
+        "id": "fr:caroteni",
+        "is_in_taxonomy": 0,
+        "percent_estimate": 0.15,
+        "quantity_estimate": 0.15,
+        "text": "caroteni"
+      }
+    ],
+    "allergens_tags": [],
+    "nova_group": 4,
+    "nutriscore_grade": "c"
+  }
+}

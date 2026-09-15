@@ -1,9 +1,10 @@
 /**
- * Last-resort translation for the ingredient scanner. Only called when
+ * Translation for the ingredient scanner. `localizeIngredientTree` names the
+ * structured ingredient list. `withTranslationFallback` covers the free-text
+ * list, shown only when OFF has no structured ingredients, and only runs when
  * off.ts's own field-based language fallback already failed — i.e.
- * `product.ingredientsTextLanguageGap` is true — so a scan never spends
- * DeepL quota on a product Open Food Facts already had in the right
- * language.
+ * `product.ingredientsTextLanguageGap` is true — so a scan never spends DeepL
+ * quota on a product Open Food Facts already had in the right language.
  */
 import type { AppLanguage } from '../i18n/index';
 import {
@@ -15,9 +16,21 @@ import {
   getCachedIngredientNameTranslation,
 } from '../db/ingredientNameTranslations';
 import { translateIngredientsText, translateTexts } from './deepl';
-import { needsTranslation } from './ingredientNames';
-import { lookupIngredientName } from './ingredientGlossary';
-import { fetchIngredientTaxonomyNames, type OffIngredient, type OffIngredientsProduct } from './off';
+import {
+  canonicalKey,
+  collectCanonicalizationRequests,
+  collectIngredientIds,
+  collectTranslationSources,
+  localizeTree,
+  type LocalizedIngredientNode,
+} from './ingredientNames';
+import {
+  fetchCanonicalIngredientIds,
+  fetchIngredientTaxonomyNames,
+  type IngredientNode,
+  type IngredientTaxonomyName,
+  type OffIngredientsProduct,
+} from './off';
 
 export async function withTranslationFallback(
   product: OffIngredientsProduct,
@@ -57,117 +70,102 @@ export async function withTranslationFallback(
   };
 }
 
-function capitalizeFirst(text: string): string {
-  return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-interface NameResolution {
-  displayName: string;
-  displayNameIsFallback: boolean;
-}
+/** Steers DeepL on short fragments ("ciclamati" is otherwise read as Italian). */
+const INGREDIENT_NAME_CONTEXT = 'Each text is one ingredient name from the ingredient list on a food product label.';
 
 /**
- * Resolves every ingredient's `displayName` to `lang`, so the name always
- * reads in the same language as the description/tier the glossary already
- * resolves for it — and never as a formatted taxonomy id (e.g. "Cow s milk"
- * from "en:cow-s-milk"), which is not a real ingredient name in any
- * language. `id`/`text` themselves are left untouched — the glossary lookup
- * keys off those, not the display name.
- *
- * In order:
- *  1. Open Food Facts' own ingredient taxonomy (`fetchIngredientTaxonomyNames`)
- *     — the authoritative source of real translated names, one batched
- *     request for every id on the product.
- *  2. The local glossary's name (`lookupIngredientName`), when the taxonomy
- *     has no translation for `lang`.
- *  3. The taxonomy's own English name — real, never id-formatted — shown as
- *     a last resort and flagged via `displayNameIsFallback` so the UI can
- *     label it rather than presenting it as a correct translation.
- *  4. The ingredient's raw label text (no id match at all), translated only
- *     when its script doesn't already match `lang`.
+ * Machine-translates ingredient names into `lang`, checking the local cache
+ * first. Names DeepL can't translate (no key, offline, quota) are simply
+ * absent from the result — the caller decides the fallback.
  */
-export async function resolveIngredientNames(
-  ingredients: OffIngredient[],
+async function translateNames(
+  texts: string[],
   lang: AppLanguage,
   signal?: AbortSignal
-): Promise<OffIngredient[]> {
-  const ids = Array.from(new Set(ingredients.map((i) => i.id).filter((id): id is string => id !== null)));
-
-  let taxonomyNames: Record<string, { localized: string | null; english: string | null }> = {};
-  if (ids.length > 0) {
-    try {
-      taxonomyNames = await fetchIngredientTaxonomyNames(ids, lang, signal);
-    } catch {
-      // Best-effort — falls through to the glossary / raw-text paths below.
-    }
-  }
-
-  const resolved: Array<NameResolution | null> = ingredients.map((ingredient) => {
-    const taxonomy = ingredient.id ? taxonomyNames[ingredient.id] : undefined;
-    if (taxonomy?.localized) {
-      return { displayName: capitalizeFirst(taxonomy.localized), displayNameIsFallback: false };
-    }
-
-    const glossaryName = lookupIngredientName(ingredient, lang);
-    if (glossaryName) {
-      return { displayName: capitalizeFirst(glossaryName), displayNameIsFallback: false };
-    }
-
-    if (taxonomy?.english) {
-      return { displayName: capitalizeFirst(taxonomy.english), displayNameIsFallback: lang !== 'en' };
-    }
-
-    return null;
-  });
-
-  // Ingredients with no taxonomy/glossary name at all fall back to their raw
-  // label text, translated only when its script doesn't already match `lang`.
-  const rawBases = Array.from(
-    new Set(
-      ingredients
-        .filter((_, i) => resolved[i] === null)
-        .map((ingredient) => ingredient.text)
-        .filter((text) => needsTranslation(text, lang))
-    )
-  );
-
-  const rawTranslations = new Map<string, string>();
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
   const uncached: string[] = [];
 
-  for (const base of rawBases) {
+  for (const text of texts) {
     try {
-      const cached = await getCachedIngredientNameTranslation(base, lang);
+      const cached = await getCachedIngredientNameTranslation(text, lang);
       if (cached) {
-        rawTranslations.set(base, cached);
+        result.set(text, cached);
         continue;
       }
     } catch {
       // A cache read failure shouldn't stop a live translation attempt.
     }
-    uncached.push(base);
+    uncached.push(text);
   }
 
-  if (uncached.length > 0) {
-    const translations = await translateTexts(uncached, lang, signal);
-    for (let i = 0; i < uncached.length; i += 1) {
-      const translated = translations[i];
-      if (!translated) continue;
-      rawTranslations.set(uncached[i], translated);
-      try {
-        await cacheIngredientNameTranslation(uncached[i], lang, translated);
-      } catch {
-        // Best-effort cache write — the translation is still usable this once.
-      }
+  if (uncached.length === 0) return result;
+
+  const translations = await translateTexts(uncached, lang, signal, INGREDIENT_NAME_CONTEXT);
+  for (let i = 0; i < uncached.length; i += 1) {
+    const translated = translations[i];
+    if (!translated) continue;
+    result.set(uncached[i], translated);
+    try {
+      await cacheIngredientNameTranslation(uncached[i], lang, translated);
+    } catch {
+      // Best-effort cache write — the translation is still usable this once.
     }
   }
+  return result;
+}
 
-  return ingredients.map((ingredient, i) => {
-    const r = resolved[i];
-    if (r) return { ...ingredient, ...r };
-    return {
-      ...ingredient,
-      displayName: rawTranslations.get(ingredient.text) ?? ingredient.text,
-      displayNameIsFallback: false,
-    };
-  });
+async function fetchTaxonomyNamesSafely(
+  ids: string[],
+  lang: AppLanguage,
+  signal?: AbortSignal
+): Promise<Record<string, IngredientTaxonomyName>> {
+  if (ids.length === 0) return {};
+  try {
+    return await fetchIngredientTaxonomyNames(ids, lang, signal);
+  } catch {
+    // Best-effort — later steps (label text, glossary, translation) still apply.
+    return {};
+  }
+}
+
+/**
+ * Resolves a display name in `lang` for every ingredient in OFF's structured
+ * tree, nested ones included (see ingredientNames.ts for the order):
+ *  1. taxonomy names for the recognised ids on the product;
+ *  2. OFF recognition of the remaining label texts, per text language;
+ *  3. taxonomy names for the ids that recognition found;
+ *  4. DeepL for whatever is still unnamed.
+ * Every step is best-effort; a failed one only means fewer names resolve.
+ */
+export async function localizeIngredientTree(
+  tree: IngredientNode[],
+  lang: AppLanguage,
+  signal?: AbortSignal
+): Promise<LocalizedIngredientNode[]> {
+  if (tree.length === 0) return [];
+
+  const taxonomy = await fetchTaxonomyNamesSafely(collectIngredientIds(tree), lang, signal);
+
+  const canonical = new Map<string, string>();
+  const requests = collectCanonicalizationRequests(tree, taxonomy, lang);
+  await Promise.all(
+    Array.from(requests, async ([lc, texts]) => {
+      try {
+        const found = await fetchCanonicalIngredientIds(texts, lc, signal);
+        for (const [text, id] of found) canonical.set(canonicalKey(lc, text), id);
+      } catch {
+        // Best-effort — these texts fall through to glossary / translation.
+      }
+    })
+  );
+
+  const newIds = Array.from(new Set(canonical.values())).filter((id) => !taxonomy[id]);
+  Object.assign(taxonomy, await fetchTaxonomyNamesSafely(newIds, lang, signal));
+
+  const ctx = { taxonomy, canonical };
+  const sources = collectTranslationSources(tree, ctx, lang);
+  const translations = sources.length > 0 ? await translateNames(sources, lang, signal) : new Map<string, string>();
+
+  return localizeTree(tree, { ...ctx, translations }, lang);
 }

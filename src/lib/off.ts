@@ -156,11 +156,39 @@ export interface OffIngredient {
   displayNameIsFallback: boolean;
 }
 
+/**
+ * One entry of OFF's structured `ingredients[]` array, read as-is — the source
+ * of the ingredient list the report screen shows. Unlike `OffIngredient`, it
+ * is never re-aligned against free text, and it keeps OFF's nesting (e.g.
+ * "E322" containing "soya lecithin").
+ */
+export interface IngredientNode {
+  /** OFF canonical id, e.g. "en:palm-oil". */
+  id: string | null;
+  /** Label text in the product's ingredients language — never shown as a name. */
+  text: string;
+  /** OFF's `is_in_taxonomy`: the id is a real taxonomy entry, not one derived from free text. */
+  isInTaxonomy: boolean;
+  percent: number | null;
+  percentEstimate: number | null;
+  percentMin: number | null;
+  percentMax: number | null;
+  children: IngredientNode[];
+}
+
+export type IngredientPercent =
+  | { kind: 'exact'; value: number }
+  | { kind: 'estimate'; value: number }
+  | { kind: 'max'; value: number }
+  | { kind: 'none' };
+
 export interface OffIngredientsProduct {
   code: string;
   name: string;
   brand: string | null;
   imageUrl: string | null;
+  /** OFF's structured ingredient list, in label order — see `IngredientNode`. */
+  ingredientTree: IngredientNode[];
   /** Free-text ingredient list as OFF has it, when there's no structured breakdown. */
   ingredientsText: string | null;
   /**
@@ -537,6 +565,52 @@ function readIngredients(raw: unknown): OffIngredient[] {
     .map((i, index) => ({ ...i, rank: index }));
 }
 
+/** Guards against a malformed, self-nesting payload; real products nest one or two levels. */
+const MAX_INGREDIENT_DEPTH = 5;
+
+/**
+ * Reads OFF's structured `ingredients[]` array into a tree, keeping OFF's
+ * order (the label order, most to least by quantity) and nesting.
+ */
+function readIngredientTree(raw: unknown, depth = 0): IngredientNode[] {
+  if (!Array.isArray(raw) || depth > MAX_INGREDIENT_DEPTH) return [];
+  const nodes: IngredientNode[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+    const text = firstString(e['text'], e['id']);
+    if (!text || looksLikeNonIngredientNote(text)) continue;
+    nodes.push({
+      id: firstString(e['id']),
+      text,
+      isInTaxonomy: num(e['is_in_taxonomy']) === 1,
+      percent: num(e['percent']),
+      percentEstimate: num(e['percent_estimate']),
+      percentMin: num(e['percent_min']),
+      percentMax: num(e['percent_max']),
+      children: readIngredientTree(e['ingredients'], depth + 1),
+    });
+  }
+  return nodes;
+}
+
+/**
+ * Which percentage to show, without inventing one: the disclosed exact value,
+ * else OFF's estimate, else OFF's upper bound. An estimate of 0 carries no
+ * information (OFF's own site shows nothing for it), and an upper bound of
+ * 100 says nothing either.
+ */
+export function formatIngredientPercent(node: IngredientNode): IngredientPercent {
+  if (node.percent !== null) return { kind: 'exact', value: node.percent };
+  if (node.percentEstimate !== null && node.percentEstimate > 0) {
+    return { kind: 'estimate', value: node.percentEstimate };
+  }
+  if (node.percentMax !== null && node.percentMax > 0 && node.percentMax < 100) {
+    return { kind: 'max', value: node.percentMax };
+  }
+  return { kind: 'none' };
+}
+
 /**
  * Builds the ingredients product, preferring Bulgarian-language fields when
  * `lang` is 'bg' and falling back to the product's default-language field
@@ -588,6 +662,7 @@ function toIngredientsProduct(raw: unknown, lang: AppLanguage = 'en'): OffIngred
     name,
     brand: readBrand(p['brands']),
     imageUrl: firstString(p['image_front_small_url'], p['image_small_url'], p['image_url']),
+    ingredientTree: readIngredientTree(p['ingredients']),
     ingredientsText,
     ingredientsTextLanguageGap,
     ingredientsTextTranslated: false,
@@ -656,6 +731,78 @@ export async function fetchIngredientTaxonomyNames(
 
   const payload = await getJson(`${TAXONOMY_URL}?${params.toString()}`, signal);
   return readTaxonomyNames(payload, lang);
+}
+
+const CANONICALIZE_URL = 'https://world.openfoodfacts.org/api/v3/taxonomy_canonicalize_tags';
+
+/**
+ * Keeps each GET well under common URL limits — Cyrillic text percent-encodes
+ * to ~6 bytes a character.
+ */
+const MAX_CANONICALIZE_BATCH_CHARS = 600;
+
+/**
+ * Reads a `taxonomy_canonicalize_tags` response, whose `canonical_tags` line
+ * up by position with the requested list. Only genuine taxonomy matches are
+ * kept — for an unknown string OFF just echoes it back as "<lc>:<text>".
+ */
+function readCanonicalTags(payload: unknown, texts: string[]): Map<string, string> {
+  const result = new Map<string, string>();
+  const tags =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>)['canonical_tags'] : null;
+  if (!Array.isArray(tags) || tags.length !== texts.length) return result;
+
+  tags.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object') return;
+    const e = entry as Record<string, unknown>;
+    const tag = firstString(e['tag']);
+    if (e['exists_in_taxonomy'] === true && tag) result.set(texts[i], tag);
+  });
+  return result;
+}
+
+/** Splits texts into request-sized batches; texts with a comma can't be sent (the list is comma-separated). */
+function batchCanonicalizeTexts(texts: string[]): string[][] {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let chars = 0;
+  for (const text of Array.from(new Set(texts.map((t) => t.trim())))) {
+    if (text === '' || text.includes(',')) continue;
+    if (current.length > 0 && chars + text.length > MAX_CANONICALIZE_BATCH_CHARS) {
+      batches.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(text);
+    chars += text.length + 1;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/**
+ * Asks Open Food Facts to recognise free ingredient text written in language
+ * `lc` (e.g. "вода" in bg -> "en:water"). This is OFF's own taxonomy
+ * matching, so it recognises ingredients that the product's parser missed
+ * because it parsed the label in the wrong language. Texts OFF doesn't
+ * recognise are simply absent from the result. Batches that fail are skipped.
+ */
+export async function fetchCanonicalIngredientIds(
+  texts: string[],
+  lc: string,
+  signal?: AbortSignal
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  for (const batch of batchCanonicalizeTexts(texts)) {
+    const params = new URLSearchParams({ tagtype: 'ingredients', lc, local_tags_list: batch.join(',') });
+    try {
+      const payload = await getJson(`${CANONICALIZE_URL}?${params.toString()}`, signal);
+      for (const [text, id] of readCanonicalTags(payload, batch)) result.set(text, id);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+    }
+  }
+  return result;
 }
 
 function readHits(payload: unknown): { hits: unknown[]; count: number } {
@@ -807,8 +954,11 @@ export const __testing = {
   readBrand,
   buildSearchUrl,
   readIngredients,
+  readIngredientTree,
   toIngredientsProduct,
   readTaxonomyNames,
+  readCanonicalTags,
+  batchCanonicalizeTexts,
   readIngredientsTextByLanguage,
   selectIngredientsTextSource,
   splitIngredientsText,
